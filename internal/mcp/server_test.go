@@ -136,3 +136,34 @@ func TestReadOnlyServerHidesWhatNeedsAWorkingTree(t *testing.T) {
 		t.Errorf("queries must still work: %s", text(res[4]))
 	}
 }
+
+func TestEveryToolSchemaHasARequiredArrayNeverNull(t *testing.T) {
+	for _, readOnly := range []bool{false, true} {
+		s := New(Source{ReadOnly: readOnly, Load: func() (*graph.Graph, error) { return testGraph(), nil }})
+		var out bytes.Buffer
+		if err := s.Serve(strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`+"\n"), &out); err != nil {
+			t.Fatal(err)
+		}
+		var res struct {
+			Result struct {
+				Tools []struct {
+					Name        string `json:"name"`
+					InputSchema struct {
+						Required *[]string `json:"required"`
+					} `json:"inputSchema"`
+				} `json:"tools"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Result.Tools) == 0 {
+			t.Fatal("no tools listed")
+		}
+		for _, tool := range res.Result.Tools {
+			if tool.InputSchema.Required == nil {
+				t.Errorf("readOnly=%v: %s has required: null (strict MCP clients reject the whole list)", readOnly, tool.Name)
+			}
+		}
+	}
+}

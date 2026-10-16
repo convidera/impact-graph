@@ -141,6 +141,10 @@ func (s *Server) tools() []map[string]any {
 
 func allTools() []map[string]any {
 	obj := func(props map[string]any, required ...string) map[string]any {
+		// JSON Schema wants an array: a nil slice would marshal as null, which strict clients (OpenCode) reject for the whole list
+		if required == nil {
+			required = []string{}
+		}
 		return map[string]any{"type": "object", "properties": props, "required": required}
 	}
 	return []map[string]any{
