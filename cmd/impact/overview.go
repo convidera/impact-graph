@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/convidera/impact/internal/report"
+	"github.com/convidera/impact-graph/internal/report"
 )
 
 func cmdOverview(args []string) error {

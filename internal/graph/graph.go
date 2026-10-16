@@ -12,8 +12,9 @@ import (
 // read correctly; Load refuses any other version and asks for a re-index.
 const SchemaVersion = 2
 
-// EngineVersion identifies the engine that wrote a snapshot.
-const EngineVersion = "0.2.0"
+// EngineVersion identifies the engine that wrote a snapshot. Release builds set it with
+// -ldflags "-X github.com/convidera/impact-graph/internal/graph.EngineVersion=v1.2.3".
+var EngineVersion = "dev"
 
 // Community is a group of closely connected symbols and contracts (a subsystem), found by Leiden clustering.
 type Community struct {

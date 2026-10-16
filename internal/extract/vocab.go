@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // Vocab joins the services of a repository on shared string values: event types, queue channels, tool names. A value is

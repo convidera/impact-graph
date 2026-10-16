@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 func cmdMerge(args []string) error {

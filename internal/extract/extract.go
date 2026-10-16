@@ -14,9 +14,9 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/scan"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/scan"
 )
 
 // Ctx is shared by every extractor of one run.

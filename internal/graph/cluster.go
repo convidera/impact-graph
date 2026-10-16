@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/convidera/impact/internal/community"
+	"github.com/convidera/impact-graph/internal/community"
 )
 
 // ClusterOptions tunes Cluster. A zero Resolution, MinSize or Seed takes its default; a zero HubPercentile disables the

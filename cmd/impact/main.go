@@ -12,10 +12,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/convidera/impact/internal/build"
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/report"
+	"github.com/convidera/impact-graph/internal/build"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/report"
 )
 
 const usage = `impact: ask a repository what a change influences.
@@ -34,6 +34,7 @@ const usage = `impact: ask a repository what a change influences.
   impact golden                     check the flows pinned in impact.toml
   impact check                      drift checks: lists kept by hand against the contracts that declare them
   impact mcp                        serve the queries as an MCP server on stdio
+  impact version                    the engine version (also -v, --version)
 
 Common flags: --root <repo> (default .), --db <file>, --config <file>
 `
@@ -99,6 +100,10 @@ func parse(fs *flag.FlagSet, args []string) ([]string, error) {
 func main() {
 	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
 		fmt.Print(usage)
+		return
+	}
+	if os.Args[1] == "version" || os.Args[1] == "-v" || os.Args[1] == "--version" {
+		fmt.Println(versionLine())
 		return
 	}
 	if f := os.Getenv("IMPACT_CPUPROFILE"); f != "" {

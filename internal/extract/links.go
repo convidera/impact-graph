@@ -3,7 +3,7 @@ package extract
 import (
 	"strings"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // runLinks adds the edges declared in impact.toml: connections that no extractor can see, such as a value that leaves

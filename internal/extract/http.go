@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // routeIndex joins the HTTP calls of a client (TypeScript, Python) to the routes of the backend: a call whose URL

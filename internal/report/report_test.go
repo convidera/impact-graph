@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/report"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/report"
 )
 
 // testGraph is two communities: c0 (the class and its two methods, in app/) and c1 (a column and its table).
@@ -27,7 +27,7 @@ func testGraph() *graph.Graph {
 	}
 	g.Meta = map[string]string{
 		"repo": "acme/shop", "commit": "0123456789abcdef", "built_at": "2026-10-16T10:00:00Z",
-		"schema_version": "2", "engine_version": "0.2.0",
+		"schema_version": "2", "engine_version": "dev",
 	}
 	g.Index()
 	return g
@@ -84,7 +84,7 @@ func TestGodNodesTable(t *testing.T) {
 func TestOverviewIsTheRepositoryMap(t *testing.T) {
 	out := report.Overview(testGraph(), 8, 8)
 	lines := strings.Split(out, "\n")
-	if lines[0] != "acme/shop @ 01234567 built 2026-10-16T10:00:00Z (schema 2, engine 0.2.0)" {
+	if lines[0] != "acme/shop @ 01234567 built 2026-10-16T10:00:00Z (schema 2, engine dev)" {
 		t.Errorf("first line = %q", lines[0])
 	}
 	for _, want := range []string{"nodes 6, edges 4", "layers: file=1 code=3 contract=2", "types:  class=1 column=1 file=1 method=2 table=1", "communities (2):", "    top: A::run, A, B::read", "god nodes:", "contracts: tables=1 columns=1 routes=0 mcp-tools=0 values=0"} {

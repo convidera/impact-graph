@@ -1,0 +1,80 @@
+name: Release
+
+# Push a tag vX.Y.Z to publish native binaries. The tree-sitter grammars are C, so every binary is built with cgo on a
+# runner of its own platform (no cross compiling).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64, runner: gha-runners-convidera-small }
+          - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm }
+          - { goos: darwin, goarch: arm64, runner: macos-15 }
+          - { goos: darwin, goarch: amd64, runner: macos-15-intel }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          CGO_ENABLED: '1'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/convidera/impact-graph/internal/graph.EngineVersion=${GITHUB_REF_NAME}" \
+            -o "impact-${{ matrix.goos }}-${{ matrix.goarch }}" ./cmd/impact
+
+      # The binary must report the tag and index a repository (this one) before it is published.
+      - name: Smoke test
+        run: |
+          bin="./impact-${{ matrix.goos }}-${{ matrix.goarch }}"
+          "${bin}" version | grep -q "^impact ${GITHUB_REF_NAME} "
+          "${bin}" index --root . -q
+          "${bin}" stats --root .
+          rm -rf .impact
+
+      - name: Upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: impact-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: impact-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: gha-runners-convidera-tiny
+    permissions:
+      contents: write
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum impact-* > checksums.txt
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

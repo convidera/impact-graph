@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/convidera/impact/internal/config"
+	"github.com/convidera/impact-graph/internal/config"
 )
 
 // File is one indexed file.

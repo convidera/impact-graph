@@ -1,4 +1,4 @@
-module github.com/convidera/impact
+module github.com/convidera/impact-graph
 
 go 1.26.0
 

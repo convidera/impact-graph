@@ -6,7 +6,7 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // The Laravel pack: what the framework does that no parser can see. The database schema comes from the migrations, a

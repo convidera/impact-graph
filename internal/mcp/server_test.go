@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 func testGraph() *graph.Graph {

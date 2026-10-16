@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/convidera/impact/internal/build"
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/build"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 const metaGo = `package shop

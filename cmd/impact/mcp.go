@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/convidera/impact/internal/build"
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/mcp"
+	"github.com/convidera/impact-graph/internal/build"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/mcp"
 )
 
 func cmdMCP(args []string) error {

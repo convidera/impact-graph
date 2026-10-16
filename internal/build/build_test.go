@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/convidera/impact/internal/build"
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/review"
+	"github.com/convidera/impact-graph/internal/build"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/review"
 )
 
 func write(t *testing.T, root string, files map[string]string) {

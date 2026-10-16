@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/report"
-	"github.com/convidera/impact/internal/review"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/report"
+	"github.com/convidera/impact-graph/internal/review"
 )
 
 // Source provides the graph and lets the server rebuild it.

@@ -6,7 +6,7 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 type tsScope struct {

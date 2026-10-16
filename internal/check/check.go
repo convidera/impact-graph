@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/scan"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/scan"
 )
 
 // Result is the outcome of one check.

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // Where formats the position of a node.

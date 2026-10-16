@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/extract"
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/scan"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/extract"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/scan"
 )
 
 // Stats summarises one run.

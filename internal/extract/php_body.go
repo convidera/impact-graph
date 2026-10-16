@@ -6,7 +6,7 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // Types are strings: a class FQN, "q:<FQN>" for a query builder of a model, "qt:<table>" for a query on a table

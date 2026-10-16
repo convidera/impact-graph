@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // Change is one changed file and the line ranges (new side) the diff touches. A file added or untracked has no ranges

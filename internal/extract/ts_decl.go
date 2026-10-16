@@ -12,7 +12,7 @@ import (
 	ts "github.com/tree-sitter/go-tree-sitter"
 	tstypescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // TypeScript, TSX, JavaScript and Vue single-file components. Symbols are functions at any nesting depth (a composable and

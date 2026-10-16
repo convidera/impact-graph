@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/review"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/review"
 )
 
 func areaGraph() *graph.Graph {

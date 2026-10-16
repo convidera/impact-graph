@@ -13,28 +13,37 @@ columns, routes, MCP tools, event types) and answers four questions:
 | What do two things share (the columns, fields and events both touch)? | `impact meet <a> <b>` |
 | What did my change leave out (tests, docs, callers, files that usually change with it)? | `impact review` |
 
-It is a standalone Go module (`github.com/convidera/impact`) with no dependency on the rest of this repository, so it can
-move to its own repository. The only repository-specific input is an optional `impact.toml` next to the code it indexes.
+It is a standalone Go module (`github.com/convidera/impact-graph`) with no dependency on the platform that uses it (convidera/managed-coding-service). The only repository-specific input is an
+optional `impact.toml` next to the code it indexes.
 
 ```sh
-devops agents impact index                       # build .impact/graph.db (about a second here)
-devops agents impact find SpendGuard::assert     # locate nodes by id or name
-devops agents impact impact column:spend_entries.amount_micros --flow -d up --only code
-devops agents impact trace splitClaudeModelCost SpendGuard::assertAllowed --via column:spend_entries.amount_micros
-devops agents impact meet mcp:create-timesheet-entry-tool mcp:analyse-monthly-timesheet-tool   # in a Laravel repo
-devops agents impact review                      # the working tree against the branch's upstream; starts with the changed areas
-devops agents impact overview                    # the repo map: repository, commit, counts, top communities, god nodes
-devops agents impact communities --top 10        # the subsystems (Leiden communities); --id N shows one
-devops agents impact hubs                        # god nodes: the most connected symbols and contracts (alias god-nodes)
-devops agents impact merge a.db b.db --out m.db  # several repositories' snapshots into one graph
-devops agents impact golden                      # the flows pinned in impact.toml
-devops agents impact check                       # drift checks: hand-kept lists against the contracts that declare them
-devops agents impact mcp                         # the queries as an MCP server on stdio
+impact index                       # build .impact/graph.db (about a second here)
+impact find SpendGuard::assert     # locate nodes by id or name
+impact impact column:spend_entries.amount_micros --flow -d up --only code
+impact trace splitClaudeModelCost SpendGuard::assertAllowed --via column:spend_entries.amount_micros
+impact meet mcp:create-timesheet-entry-tool mcp:analyse-monthly-timesheet-tool   # in a Laravel repo
+impact review                      # the working tree against the branch's upstream; starts with the changed areas
+impact overview                    # the repo map: repository, commit, counts, top communities, god nodes
+impact communities --top 10        # the subsystems (Leiden communities); --id N shows one
+impact hubs                        # god nodes: the most connected symbols and contracts (alias god-nodes)
+impact merge a.db b.db --out m.db  # several repositories' snapshots into one graph
+impact golden                      # the flows pinned in impact.toml
+impact check                       # drift checks: hand-kept lists against the contracts that declare them
+impact mcp                         # the queries as an MCP server on stdio
 ```
 
-Outside this repository: `cd impact && go build -o impact ./cmd/impact`, then `impact index --root <repo>` and the same
-subcommands. `impact stats` prints the schema and engine version, the repository, the commit and the community count. It needs a C compiler (the tree-sitter grammars are C, so this is the one module here that builds with cgo).
-Querying a stored snapshot needs no cgo: `internal/graph` links a pure Go SQLite driver.
+Install a release binary (linux and macOS, amd64 and arm64; replace the version, the asset names are `impact-<os>-<arch>`):
+
+```sh
+curl -fsSL https://github.com/convidera/impact-graph/releases/download/v0.3.0/impact-linux-amd64 -o impact && chmod +x impact
+impact version
+```
+
+Or build it: `go build -o impact ./cmd/impact` (needs a C compiler: the tree-sitter grammars are C, so this is the one module
+that builds with cgo; a release is built natively per platform). Then `impact index --root <repo>` and the subcommands above.
+`impact stats` prints the schema and engine version, the repository, the commit and the community count. Querying a stored
+snapshot needs no cgo: `internal/graph` links a pure Go SQLite driver.
+In convidera/managed-coding-service the same commands run as `devops agents impact <command>`.
 
 ## What it finds
 
@@ -251,8 +260,8 @@ finishes. See [docs/design.md](docs/design.md) for how this becomes a platform f
 ## Develop
 
 ```sh
-devops agents impact test        # go test, builds Laravel and Go fixture repositories in temp directories
-devops agents impact lint        # golangci-lint, the same configuration as session-runtime
+impact test        # go test, builds Laravel and Go fixture repositories in temp directories
+impact lint        # golangci-lint, the same configuration as session-runtime
 ```
 
 `internal/graph` (model, walk, SQLite store, merge) and `internal/community` (Leiden clustering) are pure Go. `internal/extract` is the only package that needs cgo: one file per

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // runHistory mines git for files that change together. It needs no language support, so it works on any repository and

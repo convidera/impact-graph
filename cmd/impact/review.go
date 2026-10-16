@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/convidera/impact/internal/check"
-	"github.com/convidera/impact/internal/config"
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/review"
+	"github.com/convidera/impact-graph/internal/check"
+	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/review"
 )
 
 func cmdReview(args []string) error {

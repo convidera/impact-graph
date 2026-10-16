@@ -11,7 +11,7 @@ import (
 	ts "github.com/tree-sitter/go-tree-sitter"
 	tsgo "github.com/tree-sitter/tree-sitter-go/bindings/go"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 // Types are keys "<import path>.<Name>", "[]<key>" for a slice, or "" when unknown or builtin.

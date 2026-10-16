@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/convidera/impact/internal/config"
+	"github.com/convidera/impact-graph/internal/config"
 )
 
 func write(t *testing.T, root string, files map[string]string) {

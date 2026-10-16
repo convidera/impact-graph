@@ -9,8 +9,8 @@ import (
 	ts "github.com/tree-sitter/go-tree-sitter"
 	tsphp "github.com/tree-sitter/tree-sitter-php/bindings/go"
 
-	"github.com/convidera/impact/internal/graph"
-	"github.com/convidera/impact/internal/scan"
+	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/scan"
 )
 
 type phpFile struct {

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/convidera/impact/internal/graph"
+	"github.com/convidera/impact-graph/internal/graph"
 )
 
 var (

@@ -1,7 +1,7 @@
 # Design: a repository knowledge graph for agents
 
 Status: the engine is built (this directory). The platform integration (repository catalog, indexer job, snapshot storage, MCP
-tools served by MCS, UI) is planned. Decision D25 in [docs/architecture/decisions.md](../../docs/architecture/decisions.md).
+tools served by MCS, UI) is planned. Decision D25 in [docs/architecture/decisions.md](https://github.com/convidera/managed-coding-service/blob/main/docs/architecture/decisions.md).
 
 ## Goal
 
