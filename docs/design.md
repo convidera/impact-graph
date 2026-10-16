@@ -101,5 +101,8 @@ Detailed in [docs/architecture/impact-integration.md](../../docs/architecture/im
    `refines` and `derived_from` in the order given in the platform section, and SCIP indexes where a language has a good one,
    as an optional precision upgrade.
 
+Built since: Helm values files as `config` nodes and `[[mount]]` (a values path is the body of a Go struct, joined across
+repositories at merge).
+
 Built since the last revision: Leiden communities with their labels and cohesion, god nodes (`impact hubs`), `overview`,
 `communities` and `merge`, the snapshot schema version, repository-namespaced ids and merge, and edge provenance.

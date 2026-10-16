@@ -54,6 +54,9 @@ func clusterEligible(n *Node) bool {
 	if l := Layer(n.Type); l != LayerCode && l != LayerContract {
 		return false
 	}
+	if n.Type == TypeConfig && n.Props[PropConfigKind] == ConfigKey {
+		return false // a values file is a tree of keys; it would form a community of its own for every file
+	}
 	k := n.Props["file_kind"]
 	return k != "test" && k != "doc"
 }

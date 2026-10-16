@@ -43,6 +43,7 @@ func Merge(parts map[string]*Graph) *Graph {
 			}
 		}
 	}
+	LinkConfig(out)
 	repoJSON, _ := json.Marshal(repoMeta)
 	out.Meta["repos"] = string(repoJSON)
 	out.Meta["schema_version"] = strconv.Itoa(SchemaVersion)

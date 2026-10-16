@@ -668,3 +668,116 @@ func TestMaxFilesRefusesALargeIndex(t *testing.T) {
 		t.Fatalf("at the limit the index must run: %v", err)
 	}
 }
+
+const mountTypes = `package v1
+
+type Resources struct {
+	Limits map[string]string ` + "`json:\"limits\"`" + `
+}
+
+type Toleration struct {
+	Key string ` + "`json:\"key\"`" + `
+}
+
+type AdapterSpec struct {
+	Resources Resources ` + "`json:\"resources\"`" + `
+	Port      int       ` + "`json:\"port,omitempty\"`" + `
+	Hidden    string    ` + "`json:\"-\"`" + `
+}
+
+type EnvSpec struct {
+	Adapter     AdapterSpec       ` + "`json:\"adapter\"`" + `
+	Tolerations []Toleration      ` + "`json:\"tolerations\"`" + `
+	Labels      map[string]string ` + "`json:\"labels\"`" + `
+	Next        *EnvSpec          ` + "`json:\"next\"`" + `
+}
+`
+
+const mountValues = `agentEnvironments:
+  default:
+    displayName: Default
+    spec:
+      adapter:
+        resources:
+          limits: {memory: 1536Mi}
+        port: 8080
+      tolerations:
+        - key: workload
+        - key: other
+      labels: {team: a}
+`
+
+func TestMountJoinsAValuesFileToTheGoStructItFeeds(t *testing.T) {
+	svc, deploy := t.TempDir(), t.TempDir()
+	write(t, svc, map[string]string{
+		"go.mod":                 "module example.com/svc\n\ngo 1.22\n",
+		"api/types.go":           mountTypes,
+		"values.yaml":            "agentEnvironments: {}\n",
+		"impact.toml":            "[[mount]]\npath = \"agentEnvironments.*.spec\"\ngo_type = \"EnvSpec\"\nreason = \"the chart renders it into the spec of an Environment\"\n",
+		"examples/x.values.yaml": mountValues,
+	})
+	write(t, deploy, map[string]string{"app/stage/values.yaml": mountValues + "other: 1\n"})
+
+	gs := index(t, svc)
+	const pat = "config:agentEnvironments.*.spec.adapter.resources"
+	n := gs.Nodes[pat]
+	if n == nil || n.Props[graph.PropConfigKind] != graph.ConfigPattern {
+		t.Fatalf("pattern node missing: %v", n)
+	}
+	field := "go:example.com/svc/api.AdapterSpec.Resources"
+	if !hasEdge(gs, pat, field, graph.Configures) {
+		t.Fatalf("the pattern must point at the Go field")
+	}
+	for _, want := range []string{
+		"config:agentEnvironments.*.spec",
+		"config:agentEnvironments.*.spec.adapter.port",
+		"config:agentEnvironments.*.spec.tolerations",
+		"config:agentEnvironments.*.spec.tolerations.[].key",
+		"config:agentEnvironments.*.spec.labels",
+		"config:agentEnvironments.*.spec.next", // a recursive type ends at the field
+	} {
+		if !gs.Has(want) {
+			t.Errorf("missing pattern %s", want)
+		}
+	}
+	for _, not := range []string{"config:agentEnvironments.*.spec.adapter.hidden", "config:agentEnvironments.*.spec.adapter.Hidden", "config:agentEnvironments.*.spec.next.adapter"} {
+		if gs.Has(not) {
+			t.Errorf("must not exist: %s", not)
+		}
+	}
+	// a values file of the same repository is joined while indexing
+	ex := "config:examples/x.values.yaml#agentEnvironments.default.spec.adapter.resources"
+	if !hasEdge(gs, ex, pat, graph.Configures) {
+		t.Errorf("the example values file must meet the pattern")
+	}
+	if gs.Has("config:values.yaml#agentEnvironments.default") {
+		t.Errorf("the empty map of values.yaml has no default key")
+	}
+
+	// the deployment repository has no configuration: it joins only after the merge
+	gd := index(t, deploy)
+	if len(gd.Nodes["config:app/stage/values.yaml#agentEnvironments.default.spec.adapter.resources"].Props) == 0 {
+		t.Fatal("the key of the values file is a node")
+	}
+	for _, e := range gd.Edges {
+		if e.Kind == graph.Configures {
+			t.Fatalf("nothing to join to before the merge: %+v", e)
+		}
+	}
+	m := graph.Merge(map[string]*graph.Graph{"acme/svc": gs, "acme/deploy": gd})
+	key := "acme/deploy//config:app/stage/values.yaml#agentEnvironments.default.spec.adapter.resources"
+	if !hasEdge(m, key, "acme/svc//"+pat, graph.Configures) {
+		t.Fatalf("the merge must join the deployment key to the pattern")
+	}
+	if !hasEdge(m, "acme/deploy//config:app/stage/values.yaml#agentEnvironments.default.spec.tolerations.[].key", "acme/svc//config:agentEnvironments.*.spec.tolerations.[].key", graph.Configures) {
+		t.Errorf("list elements must join too")
+	}
+	// the answer to "what does this value feed": the Go field
+	o := graph.DefaultOptions()
+	o.MaxCost = 10
+	hits, _ := m.Walk("acme/deploy//config:app/stage/values.yaml#agentEnvironments.default.spec.adapter.resources", o)
+	_, found := hits["acme/svc//"+field]
+	if !found {
+		t.Errorf("impact of the deployment value must reach the Go field")
+	}
+}

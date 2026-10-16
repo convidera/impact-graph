@@ -4,8 +4,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
@@ -45,8 +47,12 @@ type goType struct {
 }
 
 type goField struct {
-	Type string
-	ID   string
+	Type   string
+	ID     string
+	JSON   string // name in the json tag; "-" for a field that is not serialized; empty without a tag
+	Line   int
+	Map    string // element type key of a map[...]T field (a pointer to one too); empty for any other field
+	Inline bool   // json tag option "inline" or an embedded struct: the fields sit one level up
 }
 
 type goFunc struct {
@@ -105,6 +111,7 @@ func runGo(ctx *Ctx, files []scanFile) {
 	for _, f := range g.files {
 		g.analyzeFile(f)
 	}
+	g.runMounts()
 }
 
 // modOf finds the Go module that owns a directory.
@@ -256,6 +263,40 @@ func (g *golang) typeKey(f *goFile, n *ts.Node) string {
 	return ""
 }
 
+// mapElem is the element type key of a map type (or a pointer to one), "" for any other type.
+func (g *golang) mapElem(f *goFile, n *ts.Node) string {
+	for n != nil && (n.Kind() == "pointer_type" || n.Kind() == "parenthesized_type") {
+		ks := kids(n)
+		if len(ks) == 0 {
+			return ""
+		}
+		n = ks[0]
+	}
+	if n == nil || n.Kind() != "map_type" {
+		return ""
+	}
+	return g.typeKey(f, field(n, "value"))
+}
+
+// jsonTag reads the json name and the inline option from a raw struct tag literal.
+func jsonTag(lit string) (name string, inline bool) {
+	tag, err := strconv.Unquote(strings.TrimSpace(lit))
+	if err != nil {
+		return "", false
+	}
+	v, ok := reflect.StructTag(tag).Lookup("json")
+	if !ok {
+		return "", false
+	}
+	parts := strings.Split(v, ",")
+	for _, o := range parts[1:] {
+		if o == "inline" {
+			inline = true
+		}
+	}
+	return parts[0], inline
+}
+
 func (g *golang) declareType(f *goFile, spec *ts.Node) {
 	nm := field(spec, "name")
 	if nm == nil {
@@ -279,6 +320,8 @@ func (g *golang) declareType(f *goFile, spec *ts.Node) {
 					continue
 				}
 				ftype := g.typeKey(f, field(fd, "type"))
+				jsonName, inline := jsonTag(f.src.text(field(fd, "tag")))
+				mapElem := g.mapElem(f, field(fd, "type"))
 				var names []*ts.Node
 				for _, k := range kids(fd) {
 					if k.Kind() == "field_identifier" {
@@ -294,7 +337,7 @@ func (g *golang) declareType(f *goFile, spec *ts.Node) {
 				for _, nn := range names {
 					fname := f.src.text(nn)
 					fid := id + "." + fname
-					t.Fields[fname] = goField{ftype, fid}
+					t.Fields[fname] = goField{Type: ftype, ID: fid, JSON: jsonName, Line: line(nn), Map: mapElem, Inline: inline}
 					gr.AddNode(graph.Node{ID: fid, Type: graph.TypeField, Label: name + "." + fname, Path: f.src.file.Path, Line: line(nn),
 						Props: map[string]string{"lang": "go", "file_kind": f.src.file.Kind, "type": ftype}})
 					gr.AddEdge(fid, id, graph.MemberOf, 1, f.src.file.Path)
