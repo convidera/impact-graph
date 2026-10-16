@@ -110,3 +110,29 @@ func TestServeCommunityTools(t *testing.T) {
 		t.Errorf("god nodes of type method:\n%s", got)
 	}
 }
+
+func TestReadOnlyServerHidesWhatNeedsAWorkingTree(t *testing.T) {
+	s := New(Source{ReadOnly: true, Load: func() (*graph.Graph, error) { return testGraph(), nil }})
+	res := call(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"impact_review","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"impact_reindex","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"impact_find","arguments":{"text":"run"}}}`)
+	if ins := res[0]["result"].(map[string]any)["instructions"].(string); strings.Contains(ins, "impact_review") || !strings.Contains(ins, "<owner>/<name>//") {
+		t.Errorf("instructions must describe the snapshot and not promise review: %q", ins)
+	}
+	for _, tool := range res[1]["result"].(map[string]any)["tools"].([]any) {
+		if n := tool.(map[string]any)["name"]; n == "impact_review" || n == "impact_reindex" {
+			t.Errorf("%v must not be listed", n)
+		}
+	}
+	for _, i := range []int{2, 3} {
+		if r := res[i]["result"].(map[string]any); r["isError"] != true {
+			t.Errorf("call %d must fail: %v", i, r)
+		}
+	}
+	if !strings.Contains(text(res[4]), "php:A::run") {
+		t.Errorf("queries must still work: %s", text(res[4]))
+	}
+}

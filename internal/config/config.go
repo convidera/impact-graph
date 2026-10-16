@@ -37,6 +37,7 @@ type Index struct {
 	Generated []string `toml:"generated"`
 	Db        string   `toml:"db"`
 	MaxBytes  int64    `toml:"max_file_bytes"`
+	MaxFiles  int      `toml:"max_files"` // 0: no limit; a larger index fails instead of running for long (also `impact index --max-files`)
 	History   *History `toml:"history"`
 	Repo      string   `toml:"repo"` // owner/name; overrides the name taken from the origin remote
 }

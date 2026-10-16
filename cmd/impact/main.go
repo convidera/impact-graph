@@ -159,12 +159,16 @@ func cmdIndex(args []string) error {
 	fs := flag.NewFlagSet("index", flag.ContinueOnError)
 	c.flags(fs)
 	quiet := fs.Bool("q", false, "quiet")
+	maxFiles := fs.Int("max-files", 0, "fail when more than this many files would be indexed (0: impact.toml, else no limit)")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
 	cfg, db, err := c.load()
 	if err != nil {
 		return err
+	}
+	if *maxFiles > 0 {
+		cfg.Index.MaxFiles = *maxFiles
 	}
 	g, st, err := build.Build(c.root, cfg)
 	if err != nil {

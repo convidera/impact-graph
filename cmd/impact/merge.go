@@ -10,6 +10,7 @@ import (
 func cmdMerge(args []string) error {
 	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 	out := fs.String("out", ".impact/merged.db", "snapshot to write")
+	noCluster := fs.Bool("no-cluster", false, "do not cluster the merged graph (communities are per snapshot and are not carried over)")
 	pos, err := parse(fs, args)
 	if err != nil || len(pos) == 0 {
 		return fmt.Errorf("usage: impact merge <snapshot>... --out <file>")
@@ -32,9 +33,12 @@ func cmdMerge(args []string) error {
 		parts[repo] = g
 	}
 	m := graph.Merge(parts)
+	if !*noCluster {
+		m.Cluster(graph.DefaultClusterOptions())
+	}
 	if err := graph.Save(m, *out); err != nil {
 		return err
 	}
-	fmt.Printf("merged %d repositories -> %d nodes, %d edges\n", len(parts), len(m.Nodes), len(m.Edges))
+	fmt.Printf("merged %d repositories -> %d nodes, %d edges, %d communities\n", len(parts), len(m.Nodes), len(m.Edges), len(m.Communities))
 	return nil
 }

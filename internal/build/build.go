@@ -31,6 +31,9 @@ func Build(root string, cfg *config.Config) (*graph.Graph, Stats, error) {
 	if err != nil {
 		return nil, Stats{}, err
 	}
+	if cfg.Index.MaxFiles > 0 && len(files) > cfg.Index.MaxFiles {
+		return nil, Stats{}, fmt.Errorf("too many files to index: %d (limit %d, max_files or --max-files)", len(files), cfg.Index.MaxFiles)
+	}
 	g := graph.New()
 	ctx := &extract.Ctx{Root: root, Cfg: cfg, G: g, Files: files}
 	extract.Run(ctx)
