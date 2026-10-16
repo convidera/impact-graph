@@ -141,7 +141,8 @@ func (s *Server) tools() []map[string]any {
 
 func allTools() []map[string]any {
 	obj := func(props map[string]any, required ...string) map[string]any {
-		// JSON Schema wants an array: a nil slice would marshal as null, which strict clients (OpenCode) reject for the whole list
+		// A tool without arguments has no required names: the list must still be an array, not null (the variadic is nil),
+		// because MCP clients validate inputSchema.required and refuse the whole server on null.
 		if required == nil {
 			required = []string{}
 		}

@@ -20,6 +20,7 @@ type Config struct {
 	Index      Index        `toml:"index"`
 	Vocabulary []Vocabulary `toml:"vocabulary"`
 	Links      []LinkDecl   `toml:"link"`
+	Mounts     []Mount      `toml:"mount"`
 	Golden     []Golden     `toml:"golden"`
 	Checks     []Check      `toml:"check"`
 	Cluster    Cluster      `toml:"cluster"`
@@ -157,6 +158,21 @@ type LinkDecl struct {
 	To   string `toml:"to"`
 	Kind string `toml:"kind"`
 	Why  string `toml:"why"`
+}
+
+// Mount declares that a part of a Helm values file is the body of a Go struct: the chart copies agentEnvironments.<name>.spec
+// into the spec of a custom resource whose Go type is AgentRunnerEnvironmentSpec. The engine walks the struct by its json
+// tags and makes one pattern node per field path (agentEnvironments.*.spec.adapter.resources), linked to the Go field, and a
+// key of any values file, in this repository or another one after `impact merge`, that matches the pattern is linked to it.
+//
+//	[[mount]]
+//	path = "agentEnvironments.*.spec"        # key path in a values file; * is any one key
+//	go_type = "AgentRunnerEnvironmentSpec"   # struct name, or its full key (import path + "." + name) when the name is not unique
+//	reason = "the chart renders it into the spec of an AgentRunnerEnvironment"
+type Mount struct {
+	Path   string `toml:"path"`
+	GoType string `toml:"go_type"`
+	Reason string `toml:"reason"`
 }
 
 // Golden pins a flow that must exist; `impact golden` fails when an extractor regresses or a refactor hides it.

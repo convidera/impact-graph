@@ -87,6 +87,14 @@ code that emits `usage_update` and the PHP `match` arm that handles it meet in `
 from the producer and consumer globs. A `[[link]]` with a written reason declares what no extractor can see, for example a
 price that leaves the code in an agent's config file and comes back in its output.
 
+**Deployment values** (`[[mount]]`): every key of a Helm values file (`values.yaml`, `values-stage.yaml`, `stage.values.yaml`) is a
+`config` node, with no configuration. A `[[mount]]` in the repository that owns the Go types says that a values path is the
+body of a struct, for example `agentEnvironments.*.spec` is an `AgentRunnerEnvironmentSpec`; the engine walks the struct by its
+json tags and makes one pattern node per field path (`agentEnvironments.*.spec.adapter.resources`) linked to the Go field.
+`impact merge` (and the index itself, for a values file of the same repository) joins each key that matches a pattern, so the
+`adapter.resources` of a stage values file in a deployment repository, which has no `impact.toml`, answers "what code does this
+value feed" and the Go field answers "which deployments set me" (`impact impact -d up`), with `file:line` on both sides.
+
 ## The model
 
 A graph of nodes (`php:App\Foo::bar`, `go:<import path>.Type.Method`, `column:table.col`, `route:POST /x`, `mcp:tool-name`,
@@ -187,6 +195,11 @@ from = "OpencodeProfile::opencodeCost"
 to = "backend.opencodeStore.Children"
 why = "the prices go into the agent's config; the adapter reads the priced cost back from its store"
 
+[[mount]]                            # a part of a values file is the body of a Go struct
+path = "agentEnvironments.*.spec"    # key path; * is any one key, [] a list element
+go_type = "AgentRunnerEnvironmentSpec"   # struct name, or its full key when the name is not unique
+reason = "the chart renders it into the spec of an AgentRunnerEnvironment"
+
 [[golden]]                           # a flow that must keep existing; `impact golden` fails otherwise
 name = "a reported cost reaches the limit check"
 from = "backend.splitClaudeModelCost"
@@ -248,7 +261,8 @@ finishes. See [docs/design.md](docs/design.md) for how this becomes a platform f
 - Resolution is by declared types, docblocks and conventions, not a type checker. An untyped receiver produces no edge (or a
   low-confidence guess for a distinctive method name), which is deliberate: a wrong edge costs more than a missing one.
 - Not extracted yet: OpenAPI documents (a client is joined to a route by URL, not by operation id), Go HTTP routes, validation
-  rules, environment variables and Helm values, JSON payload keys as nodes, and knowledge nodes (requirements, tickets,
+  rules, environment variables, Helm templates (values files are read, see `[[mount]]`; a mount follows structs declared in the
+  repository, a field of an imported type such as `corev1.ResourceRequirements` ends the pattern at that field), JSON payload keys as nodes, and knowledge nodes (requirements, tickets,
   decisions, documentation sections, features).
 - Client side, resolution is structural, not a type checker: a call through a value the extractor cannot follow (a Vuex
   `dispatch('module/action')` by string, an event bus, a prop callback, a Python attribute whose class is not visible) produces
