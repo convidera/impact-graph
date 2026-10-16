@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The tree-sitter grammars are C, so the module builds with cgo and the runner needs a C compiler.
+  go:
+    name: Go
+    runs-on: gha-runners-convidera-small
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # the co-change history of the index reads git log
+          fetch-depth: 300
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: C compiler
+        run: cc --version
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt check
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "${unformatted}"
+            exit 1
+          fi
+
+      - name: go test
+        run: go test ./... -cover
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+
+      # The built binary indexes this repository and answers a query: proves the cgo build works end to end.
+      - name: Smoke test
+        run: |
+          go build -o "${RUNNER_TEMP}/impact" -ldflags "-X github.com/convidera/impact-graph/internal/graph.EngineVersion=ci" ./cmd/impact
+          "${RUNNER_TEMP}/impact" version | grep -q '^impact ci '
+          "${RUNNER_TEMP}/impact" index --root . -q
+          "${RUNNER_TEMP}/impact" stats --root .
