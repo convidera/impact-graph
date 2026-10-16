@@ -56,9 +56,51 @@ jobs:
           path: impact-${{ matrix.goos }}-${{ matrix.goarch }}
           if-no-files-found: error
 
+  # The adapter image of convidera/managed-coding-service is alpine (musl). A glibc binary does not run there, so these are
+  # linked statically against musl in an alpine container (needs docker, which the GitHub-hosted runners have).
+  build-musl:
+    name: Build linux-musl/${{ matrix.goarch }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { goarch: amd64, runner: ubuntu-24.04 }
+          - { goarch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build
+        run: |
+          docker run --rm -v "${PWD}:/src" -w /src -e CGO_ENABLED=1 golang:1.27-alpine sh -c '
+            apk add --no-cache gcc musl-dev &&
+            go build -trimpath \
+              -ldflags "-s -w -linkmode external -extldflags -static -X github.com/convidera/impact-graph/internal/graph.EngineVersion='"${GITHUB_REF_NAME}"'" \
+              -o impact-linux-musl-${{ matrix.goarch }} ./cmd/impact'
+
+      # Run it on a bare alpine (no Go, no libc beyond musl): it must be static, report the tag and index a repository.
+      - name: Smoke test
+        run: |
+          docker run --rm -v "${PWD}:/repo:ro" alpine:3.22 sh -c '
+            apk add --no-cache git >/dev/null &&
+            git config --global --add safe.directory /repo &&
+            bin=/repo/impact-linux-musl-${{ matrix.goarch }} &&
+            ! ldd "$bin" >/dev/null 2>&1 &&
+            "$bin" version | grep -q "^impact '"${GITHUB_REF_NAME}"' " &&
+            "$bin" index --root /repo --db /tmp/g.db -q &&
+            "$bin" stats --root /repo --db /tmp/g.db'
+
+      - name: Upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: impact-linux-musl-${{ matrix.goarch }}
+          path: impact-linux-musl-${{ matrix.goarch }}
+          if-no-files-found: error
+
   publish:
     name: Publish release
-    needs: build
+    needs: [build, build-musl]
     runs-on: gha-runners-convidera-tiny
     permissions:
       contents: write
