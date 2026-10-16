@@ -141,6 +141,11 @@ func (s *Server) tools() []map[string]any {
 
 func allTools() []map[string]any {
 	obj := func(props map[string]any, required ...string) map[string]any {
+		// A tool without arguments has no required names: the list must still be an array, not null (the variadic is nil),
+		// because MCP clients validate inputSchema.required and refuse the whole server on null.
+		if required == nil {
+			required = []string{}
+		}
 		return map[string]any{"type": "object", "properties": props, "required": required}
 	}
 	return []map[string]any{

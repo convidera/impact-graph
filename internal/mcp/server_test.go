@@ -136,3 +136,20 @@ func TestReadOnlyServerHidesWhatNeedsAWorkingTree(t *testing.T) {
 		t.Errorf("queries must still work: %s", text(res[4]))
 	}
 }
+
+// MCP clients (OpenCode 2.0.25) validate the tool list and drop the whole server when an inputSchema.required is null.
+func TestEveryToolSchemaHasARequiredArray(t *testing.T) {
+	s := New(Source{Root: ".", Load: func() (*graph.Graph, error) { return testGraph(), nil }, Reindex: func() (string, error) { return "ok", nil }})
+	res := call(t, s, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	tools := res[0]["result"].(map[string]any)["tools"].([]any)
+	if len(tools) == 0 {
+		t.Fatal("no tools")
+	}
+	for _, x := range tools {
+		tool := x.(map[string]any)
+		schema := tool["inputSchema"].(map[string]any)
+		if _, ok := schema["required"].([]any); !ok {
+			t.Errorf("%s: inputSchema.required must be an array, got %#v", tool["name"], schema["required"])
+		}
+	}
+}
