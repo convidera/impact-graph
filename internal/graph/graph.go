@@ -66,6 +66,7 @@ const (
 	TypeRoute    = "route"
 	TypeTool     = "mcp-tool"
 	TypeValue    = "value"
+	TypeConfig   = "config" // a key path in a Helm values file (kind "key"), or a path pattern a declared mount derives from a Go struct (kind "pattern")
 
 	// Knowledge layer: what the code is for. Nothing extracts these from code; they come from tickets, requirement documents,
 	// decisions and the links between them (a session started from a ticket, a pull request that names one).
@@ -89,7 +90,7 @@ func Layer(nodeType string) string {
 	switch nodeType {
 	case TypeFile, TypeTest, TypeDoc:
 		return LayerFile
-	case TypeTable, TypeColumn, TypeRoute, TypeTool, TypeValue:
+	case TypeTable, TypeColumn, TypeRoute, TypeTool, TypeValue, TypeConfig:
 		return LayerContract
 	case TypeRequirement, TypeTicket, TypeDecision, TypeSection, TypeFeature:
 		return LayerKnowledge
@@ -120,7 +121,7 @@ func DefaultProv(kind, dst string, conf float64, evidence string) string {
 		return ProvDocs
 	case CoChanged:
 		return ProvHistory
-	case Link:
+	case Link, Configures:
 		return ProvDeclared
 	case Produces, Consumes, Mentions:
 		return ProvContract
@@ -161,6 +162,7 @@ const (
 	DocumentedIn = "documented_in" // node -> document that names it
 	CoChanged    = "co_changed"    // file <-> file that change together in git history
 	Link         = "link"          // declared in the configuration, with a written reason
+	Configures   = "configures"    // values key <-> the pattern of a declared mount it matches <-> the Go field the pattern comes from
 
 	// Knowledge layer.
 	Implements  = "implements"   // code or contract -> requirement or feature it realises
@@ -218,6 +220,7 @@ var Kinds = map[string]KindInfo{
 	DocumentedIn: {Attach, Fwd, None, 0.5, 0.5},
 	CoChanged:    {History, Both, None, 2, 2},
 	Link:         {Data, Fwd, Both, 1, 1},
+	Configures:   {Data, Both, Both, 1, 1},
 	Implements:   {Attach, Both, None, 1, 1},
 	Refines:      {Attach, Both, None, 1, 1},
 	DerivedFrom:  {Attach, Both, None, 1, 1},

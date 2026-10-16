@@ -43,6 +43,10 @@ func runDocs(ctx *Ctx) {
 			}
 		case graph.TypeTable:
 			add(n.Label, id)
+		case graph.TypeConfig:
+			if n.Props[graph.PropConfigKind] == graph.ConfigPattern {
+				add(n.Label, id)
+			}
 		case graph.TypeColumn, graph.TypeTool:
 			add(n.Label, id)
 		case graph.TypeValue:
