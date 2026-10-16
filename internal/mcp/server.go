@@ -20,6 +20,9 @@ type Source struct {
 	Root    string
 	Load    func() (*graph.Graph, error)
 	Reindex func() (string, error)
+	// ReadOnly serves a stored snapshot that has no working tree behind it (for example the merged snapshot of several
+	// repositories): impact_reindex and impact_review are neither listed nor callable.
+	ReadOnly bool
 }
 
 // Server answers MCP requests.
@@ -81,18 +84,25 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 func (s *Server) handle(req request) (any, *rpcError) {
 	switch req.Method {
 	case "initialize":
+		instructions := "Impact graph of the repository. Before planning a change, call impact_impact on the symbols, columns, " +
+			"routes or events it touches to see what else depends on them. Before you finish, call impact_review to see " +
+			"which tests, documents, contracts and files the change is related to but does not contain."
+		if s.src.ReadOnly {
+			instructions = "Impact graph of the repositories of this session, indexed when they were checked out (a snapshot, not the " +
+				"working tree). Node ids of a repository are prefixed with <owner>/<name>//; values shared across repositories, such as " +
+				"event types, are one node. Before planning a change, call impact_impact on the symbols, columns, routes or events it " +
+				"touches to see what else depends on them. Use impact_overview for the map of the code base."
+		}
 		return map[string]any{
 			"protocolVersion": "2025-06-18",
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "impact", "version": "0.1.0"},
-			"instructions": "Impact graph of the repository. Before planning a change, call impact_impact on the symbols, columns, " +
-				"routes or events it touches to see what else depends on them. Before you finish, call impact_review to see " +
-				"which tests, documents, contracts and files the change is related to but does not contain.",
+			"serverInfo":      map[string]any{"name": "impact", "version": graph.EngineVersion},
+			"instructions":    instructions,
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": tools()}, nil
+		return map[string]any{"tools": s.tools()}, nil
 	case "tools/call":
 		var p struct {
 			Name      string          `json:"name"`
@@ -114,7 +124,22 @@ func str(name, desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
 }
 
-func tools() []map[string]any {
+// tools is the tool list of this server: the read-only variant leaves out what needs a working tree.
+func (s *Server) tools() []map[string]any {
+	all := allTools()
+	if !s.src.ReadOnly {
+		return all
+	}
+	kept := all[:0:0]
+	for _, t := range all {
+		if name := t["name"]; name != "impact_reindex" && name != "impact_review" {
+			kept = append(kept, t)
+		}
+	}
+	return kept
+}
+
+func allTools() []map[string]any {
 	obj := func(props map[string]any, required ...string) map[string]any {
 		return map[string]any{"type": "object", "properties": props, "required": required}
 	}
@@ -202,6 +227,9 @@ func (s *Server) graph() (*graph.Graph, error) {
 }
 
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
+	if s.src.ReadOnly && (name == "impact_reindex" || name == "impact_review") {
+		return "", fmt.Errorf("%s needs a working tree and is not available on this snapshot", name)
+	}
 	if name == "impact_reindex" {
 		msg, err := s.src.Reindex()
 		s.mu.Lock()

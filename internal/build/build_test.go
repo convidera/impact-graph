@@ -651,3 +651,20 @@ func TestGeneratedFilesStayInGraphButNotInGodNodes(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxFilesRefusesALargeIndex(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{"a.go": "package a\n", "b.go": "package a\n", "c.go": "package a\n"})
+	cfg, err := config.Load(root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Index.MaxFiles = 2
+	if _, _, err := build.Build(root, cfg); err == nil || !strings.Contains(err.Error(), "too many files to index: 3 (limit 2") {
+		t.Fatalf("want a too many files error, got %v", err)
+	}
+	cfg.Index.MaxFiles = 3
+	if _, _, err := build.Build(root, cfg); err != nil {
+		t.Fatalf("at the limit the index must run: %v", err)
+	}
+}
