@@ -32,7 +32,7 @@ impact check                       # drift checks: hand-kept lists against the c
 impact mcp                         # the queries as an MCP server on stdio
 ```
 
-Install a release binary (linux and macOS, amd64 and arm64; replace the version, the asset names are `impact-<os>-<arch>`):
+Install a release binary (linux and macOS, amd64 and arm64; replace the version, the asset names are `impact-<os>-<arch>`; `impact-linux-musl-<arch>` is a static binary for alpine; `checksums.txt` lists the sha256 of all):
 
 ```sh
 curl -fsSL https://github.com/convidera/impact-graph/releases/download/v0.3.0/impact-linux-amd64 -o impact && chmod +x impact
