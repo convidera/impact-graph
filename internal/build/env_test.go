@@ -15,6 +15,7 @@ func envFixture() map[string]string {
 		"config/adapter.php":          "<?php\nreturn [\n    'timeout' => env('ADAPTER_CLONE_TIMEOUT', 120),\n    'name' => env('APP_NAME'),\n];\n",
 		"app/Adapter.php":             "<?php\nclass Adapter\n{\n    public function limit()\n    {\n        return getenv('ADAPTER_REPO_LIMIT');\n    }\n}\n",
 		"cmd/main.go":                 "package main\n\nimport \"os\"\n\nfunc timeout() string {\n\treturn os.Getenv(\"ADAPTER_GO_TIMEOUT\")\n}\n\nfunc lookup() {\n\t_, _ = os.LookupEnv(\"ADAPTER_GO_LOOKUP\")\n}\n",
+		"cmd/config.go":               "package main\n\n// Load takes the environment as a function so that tests can inject it.\nfunc Load(getenv func(string) string) string {\n\t_ = getenv(\"PORT\")\n\treturn getenv(\"ADAPTER_BACKEND_NAME\")\n}\n\ntype env struct{ lookupEnv func(string) (string, bool) }\n\nfunc (e env) mode() bool {\n\t_, ok := e.lookupEnv(\"ADAPTER_MODE_FLAG\")\n\treturn ok\n}\n",
 		"web/src/api.ts":              "export function base() {\n  return process.env.ADAPTER_PAGE_LIMIT\n}\n",
 		"web/src/view.tsx":            "export const url = import.meta.env.ADAPTER_VIEW_URL\n",
 		"worker/settings.py":          "import os\n\nTIMEOUT = os.environ[\"ADAPTER_WORKER_TIMEOUT\"]\nRETRIES = os.environ.get(\"ADAPTER_RETRY_COUNT\", \"3\")\nGROUP = os.getenv(\"ADAPTER_GROUP_NAME\")\n",
@@ -71,6 +72,8 @@ func TestEnvironmentNamesConnectTheReadersToTheirDefinitions(t *testing.T) {
 		{"env:ADAPTER_REPO_LIMIT", "app/Adapter.php", true},
 		{"env:ADAPTER_GO_TIMEOUT", "cmd/main.go", true},
 		{"env:ADAPTER_GO_LOOKUP", "cmd/main.go", true},
+		{"env:ADAPTER_BACKEND_NAME", "cmd/config.go", true},
+		{"env:ADAPTER_MODE_FLAG", "cmd/config.go", true},
 		{"env:ADAPTER_PAGE_LIMIT", "web/src/api.ts", true},
 		{"env:ADAPTER_VIEW_URL", "web/src/view.tsx", false},
 		{"env:ADAPTER_VUE_URL", "web/App.vue", false},
@@ -118,7 +121,7 @@ func TestEnvironmentNamesConnectTheReadersToTheirDefinitions(t *testing.T) {
 	if d := definers(g, "env:ADAPTER_LIST_FORM"); !contains(d, "file:docker-compose.yml") {
 		t.Errorf("compose environment list defined by %v", d)
 	}
-	for _, value := range []string{"env:ADAPTER_COMMENTED", "env:APP_NAME", "env:DB_HOST", "env:APP_DEBUG_X"} {
+	for _, value := range []string{"env:ADAPTER_COMMENTED", "env:APP_NAME", "env:DB_HOST", "env:APP_DEBUG_X", "env:PORT"} {
 		if g.Has(value) {
 			t.Errorf("%s is a generic or commented name and must not join", value)
 		}
@@ -211,5 +214,27 @@ func TestMergedRepositoriesJoinThroughEnvAndImageNames(t *testing.T) {
 	}
 	if path := strings.Join(graph.PathTo(hits, key), " -> "); !strings.Contains(path, "env:ADAPTER_CLONE_TIMEOUT") {
 		t.Fatalf("the route to the values file must pass the shared variable: %s", path)
+	}
+}
+
+func TestAnInjectedGetenvFunctionJoinsTheGoCodeToTheChartThatSetsTheVariable(t *testing.T) {
+	appRoot, chartRoot := t.TempDir(), t.TempDir()
+	write(t, appRoot, map[string]string{
+		"internal/config/config.go": "package config\n\n// Load takes getenv so that tests can inject the environment.\nfunc Load(getenv func(string) string) string {\n\treturn getenv(\"ADAPTER_BACKEND\")\n}\n",
+	})
+	write(t, chartRoot, map[string]string{
+		"deploy/values.yaml": "agent:\n  env:\n    - name: ADAPTER_BACKEND\n      value: acp\n",
+	})
+	g := graph.Merge(map[string]*graph.Graph{"acme/app": index(t, appRoot), "acme/chart": index(t, chartRoot)})
+
+	if l := g.Links(); l.Through != 1 {
+		t.Fatalf("ADAPTER_BACKEND is set in the chart and read through getenv in the app: %+v", l)
+	}
+	from := nodeOf(t, g, "acme/app", "internal/config/config.go", graph.TypeFunction)
+	o := graph.DefaultOptions()
+	o.Dir = "up"
+	hits, _ := g.Walk(from, o)
+	if key := "acme/chart//file:deploy/values.yaml"; hits[key] == nil {
+		t.Fatalf("Load does not reach the values file of acme/chart; reached %d nodes", len(hits))
 	}
 }
