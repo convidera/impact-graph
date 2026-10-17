@@ -32,10 +32,10 @@ impact check                       # drift checks: hand-kept lists against the c
 impact mcp                         # the queries as an MCP server on stdio
 ```
 
-Install a release binary (linux and macOS, amd64 and arm64; replace the version, the asset names are `impact-<os>-<arch>`; `impact-linux-musl-<arch>` is a static binary for alpine; `checksums.txt` lists the sha256 of all):
+Install a release binary (linux and macOS, amd64 and arm64; replace `vX.Y.Z` with a release tag, the asset names are `impact-<os>-<arch>`; `impact-linux-musl-<arch>` is a static binary for alpine; `checksums.txt` lists the sha256 of all):
 
 ```sh
-curl -fsSL https://github.com/convidera/impact-graph/releases/download/v0.3.0/impact-linux-amd64 -o impact && chmod +x impact
+curl -fsSL https://github.com/convidera/impact-graph/releases/download/vX.Y.Z/impact-linux-amd64 -o impact && chmod +x impact
 impact version
 ```
 
@@ -84,7 +84,11 @@ now at function level in Go, PHP, TypeScript, Vue and Python.
 
 **Across services** (`impact.toml`): a vocabulary (`[[vocabulary]]`) turns a list of shared string values into nodes. The Go
 code that emits `usage_update` and the PHP `match` arm that handles it meet in `event:usage_update`, with the direction taken
-from the producer and consumer globs. A `[[link]]` with a written reason declares what no extractor can see, for example a
+from the producer and consumer globs. A value that is a bare word (`error`, `plan`) is also an ordinary string elsewhere, so a literal of it joins the vocabulary
+only when the same function or file mentions another value of that vocabulary, or when it arrives through a constant or enum
+case; a lone one is kept at confidence 0.65, below the walk threshold. The rule is lifted for a value whose entry in the
+vocabulary file says `"ambiguous": false`, and for a vocabulary whose `produce` and `consume` globs cover at most five files.
+A `[[link]]` with a written reason declares what no extractor can see, for example a
 price that leaves the code in an agent's config file and comes back in its output.
 
 **Deployment values** (`[[mount]]`): every key of a Helm values file (`values.yaml`, `values-stage.yaml`, `stage.values.yaml`) is a

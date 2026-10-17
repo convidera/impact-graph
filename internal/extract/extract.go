@@ -202,6 +202,7 @@ func Run(ctx *Ctx) {
 	runGo(ctx, goFiles)
 	runTS(ctx, tsFiles) // after the backend: the HTTP calls of a client are joined to the routes found there
 	runPython(ctx, pyFiles)
+	ctx.Vocab.flush(ctx)
 	runYAML(ctx)
 	runEnv(ctx)
 	graph.LinkConfig(ctx.G) // after the Go mounts (runGo) and the values files
