@@ -100,11 +100,14 @@ func TestEnvironmentNamesConnectTheReadersToTheirDefinitions(t *testing.T) {
 			t.Errorf("%s is not a value node", value)
 		}
 	}
-	if d := definers(g, "env:ADAPTER_CLONE_TIMEOUT"); !contains(d, "file:.env.example") {
-		t.Errorf("dotenv key defined by %v", d)
+	if c := consumers(g, "env:ADAPTER_CLONE_TIMEOUT"); !contains(c, "file:.env.example") {
+		t.Errorf("a dotenv key is expected by the application, consumers %v", c)
 	}
-	if d := definers(g, "env:ADAPTER_EXPORTED"); !contains(d, "file:.env.example") {
-		t.Errorf("export line defined by %v", d)
+	if c := consumers(g, "env:ADAPTER_EXPORTED"); !contains(c, "file:.env.example") {
+		t.Errorf("an export line is expected by the application, consumers %v", c)
+	}
+	if d := definers(g, "env:ADAPTER_CLONE_TIMEOUT"); contains(d, "file:.env.example") {
+		t.Errorf("a dotenv file must not be a producer, definers %v", d)
 	}
 	if d := definers(g, "env:ADAPTER_HELM_TIMEOUT"); !contains(d, "file:deploy/values.yaml") {
 		t.Errorf("helm env list defined by %v", d)

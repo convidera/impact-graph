@@ -25,9 +25,9 @@ const joinConfidence = 0.6
 
 var vueEnv = regexp.MustCompile(`\b(?:import\.meta|process)\.env\.([A-Za-z_][A-Za-z0-9_]*)`)
 
-// runEnv joins the repositories through the names of environment variables and images (joins.go). A dotenv file, a compose
-// or Kubernetes manifest and a Helm values file define a variable or deploy an image; the code reads the variable; a GitHub
-// workflow pushes the image. Each name is one value node that every repository sharing it reaches, so graph.Merge joins them.
+// runEnv joins the repositories through the names of environment variables and images (joins.go). A compose or Kubernetes
+// manifest and a Helm values file set a variable or deploy an image, and a GitHub workflow pushes an image: those are the
+// producing sides. The code reads a variable and a dotenv file expects it: those are the consuming sides. Each name is one value node that every repository sharing it reaches, so graph.Merge joins them.
 // A read is attributed to the function that makes it, else to its file.
 func runEnv(ctx *Ctx) {
 	e := &envScan{ctx: ctx, fns: functionsByLine(ctx.G)}
@@ -77,10 +77,18 @@ func (e *envScan) link(kind, from, id, file string, line int, note string) {
 	e.ctx.G.AddEdgeProv(from, id, kind, joinConfidence, fmt.Sprintf("%s:%d %s", file, line, note), graph.ProvConvention)
 }
 
-// defineEnv records that a file defines an environment variable.
+// defineEnv records that a deployment definition sets an environment variable: the producing side of the name.
 func (e *envScan) defineEnv(file string, line int, name string) {
 	if joinableEnv(name) {
 		e.link(graph.Produces, fileID(file), "env:"+name, file, line, "env "+name)
+	}
+}
+
+// expectEnv records that a file expects an environment variable, as a dotenv key does: the consuming side of the name.
+// A .env.example says what the application reads, it does not set the value of a running service.
+func (e *envScan) expectEnv(file string, line int, name string) {
+	if joinableEnv(name) {
+		e.link(graph.Consumes, fileID(file), "env:"+name, file, line, "env "+name)
 	}
 }
 
@@ -113,7 +121,7 @@ func (e *envScan) dotenv(file string) {
 		}
 		t = strings.TrimSpace(strings.TrimPrefix(t, "export "))
 		if key, _, ok := strings.Cut(t, "="); ok {
-			e.defineEnv(file, i+1, strings.TrimSpace(key))
+			e.expectEnv(file, i+1, strings.TrimSpace(key))
 		}
 	}
 }
