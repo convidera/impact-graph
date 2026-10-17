@@ -65,6 +65,8 @@ const (
 	TypeColumn   = "column"
 	TypeRoute    = "route"
 	TypeTool     = "mcp-tool"
+	TypeSchema   = "schema"    // a named schema of an OpenAPI document
+	TypeOp       = "operation" // an operation (verb and path) of an OpenAPI document
 	TypeValue    = "value"
 	TypeConfig   = "config" // a key path in a Helm values file (kind "key"), or a path pattern a declared mount derives from a Go struct (kind "pattern")
 
@@ -90,7 +92,7 @@ func Layer(nodeType string) string {
 	switch nodeType {
 	case TypeFile, TypeTest, TypeDoc:
 		return LayerFile
-	case TypeTable, TypeColumn, TypeRoute, TypeTool, TypeValue, TypeConfig:
+	case TypeTable, TypeColumn, TypeRoute, TypeTool, TypeSchema, TypeOp, TypeValue, TypeConfig:
 		return LayerContract
 	case TypeRequirement, TypeTicket, TypeDecision, TypeSection, TypeFeature:
 		return LayerKnowledge
@@ -374,7 +376,7 @@ func (g *Graph) Group(id string) string {
 		return "code"
 	}
 	switch n.Type {
-	case TypeTable, TypeColumn, TypeRoute, TypeTool, TypeValue, TypeField:
+	case TypeTable, TypeColumn, TypeRoute, TypeTool, TypeSchema, TypeOp, TypeValue, TypeField:
 		return "contracts"
 	case TypeTest:
 		return "tests"
