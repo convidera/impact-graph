@@ -6,10 +6,15 @@ package check
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/convidera/impact-graph/internal/config"
@@ -49,17 +54,6 @@ func walkPath(doc any, path string) any {
 		cur = m[part]
 	}
 	return cur
-}
-
-func strs(v any) []string {
-	var out []string
-	arr, _ := v.([]any)
-	for _, x := range arr {
-		if s, ok := x.(string); ok {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func keys(v any) []string {
@@ -107,68 +101,156 @@ func sourceValues(root, source string) ([]string, error) {
 				}
 			}
 		}
-	case "openapi-event-types":
-		arr, _ := doc["x-event-types"].([]any)
-		for _, e := range arr {
-			if t, ok := asMap(e)["type"].(string); ok {
-				out = append(out, t)
-			}
+	case "json":
+		vals, err := selectJSON(doc, schema)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", source, err)
 		}
-	case "openapi-extension":
-		out = strs(doc[schema])
-	case "registry-payload-keys":
-		arr, _ := doc["x-events"].([]any)
-		for _, e := range arr {
-			if asMap(e)["producer"] == schema {
-				out = append(out, keys(asMap(asMap(e)["payload"])["properties"])...)
-			}
-		}
-	case "registry-family-keys":
-		arr, _ := doc["x-event-families"].([]any)
-		for _, e := range arr {
-			if asMap(e)["prefix"] == schema {
-				out = append(out, keys(asMap(asMap(e)["payload"])["properties"])...)
-			}
-		}
-	case "registry-list", "registry-keys":
-		path, key, _ := strings.Cut(schema, "/")
-		cur := walkPath(doc, path)
-		if kind == "registry-list" {
-			out = strs(cur)
-			break
-		}
-		arr, _ := cur.([]any)
-		for _, e := range arr {
-			if s, ok := asMap(e)[key].(string); ok {
-				out = append(out, s)
-			}
-		}
+		out = vals
 	default:
-		return nil, fmt.Errorf("unknown check source %q", source)
+		return nil, fmt.Errorf("unknown check source %q (the kinds are go-struct, go-struct-required, openapi-schema, openapi-paths, openapi-operations and json:<file>#<selector>)", source)
 	}
 	return out, nil
 }
 
-var jsonTag = regexp.MustCompile("`[^`\\n]*json:\"([^\",]+)((?:,[a-z]+)*)\"")
-
-// goStruct reads the json names of a Go struct: the CRD types are Go structs that controller-gen turns into the schema.
+// goStruct reads the json names of a Go struct with the Go parser: the CRD types are Go structs that controller-gen turns
+// into the schema. Embedded structs of the same file with an inline tag are followed; a field without a json tag, or tagged
+// "-", is skipped.
 func goStruct(root, file, name string, requiredOnly bool) ([]string, error) {
-	b, err := os.ReadFile(filepath.Join(root, file))
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filepath.Join(root, file), nil, parser.SkipObjectResolution)
 	if err != nil {
 		return nil, err
 	}
-	re := regexp.MustCompile(`(?ms)^type\s+` + regexp.QuoteMeta(name) + `\s+struct\s*\{(.*?)^\}`)
-	m := re.FindSubmatch(b)
-	if m == nil {
+	structs := map[string]*ast.StructType{}
+	for _, d := range f.Decls {
+		if gd, ok := d.(*ast.GenDecl); ok {
+			for _, sp := range gd.Specs {
+				if ts, ok := sp.(*ast.TypeSpec); ok {
+					if st, ok := ts.Type.(*ast.StructType); ok {
+						structs[ts.Name.Name] = st
+					}
+				}
+			}
+		}
+	}
+	st := structs[name]
+	if st == nil {
 		return nil, fmt.Errorf("no struct %s in %s", name, file)
 	}
 	var out []string
-	for _, t := range jsonTag.FindAllSubmatch(m[1], -1) {
-		if string(t[1]) != "-" && (!requiredOnly || !strings.Contains(string(t[2]), "omitempty")) {
-			out = append(out, string(t[1]))
+	var walk func(st *ast.StructType, depth int)
+	walk = func(st *ast.StructType, depth int) {
+		for _, fld := range st.Fields.List {
+			if fld.Tag == nil {
+				continue
+			}
+			tag, err := strconv.Unquote(fld.Tag.Value)
+			if err != nil {
+				continue
+			}
+			jn, opts, _ := strings.Cut(reflect.StructTag(tag).Get("json"), ",")
+			if jn == "-" {
+				continue
+			}
+			if jn == "" && strings.Contains(","+opts+",", ",inline,") && depth < 4 {
+				if id, ok := fld.Type.(*ast.Ident); ok && structs[id.Name] != nil {
+					walk(structs[id.Name], depth+1)
+				}
+				continue
+			}
+			if jn == "" || (requiredOnly && strings.Contains(","+opts+",", ",omitempty,")) {
+				continue
+			}
+			out = append(out, jn)
+		}
+	}
+	walk(st, 0)
+	return out, nil
+}
+
+// selectJSON evaluates a selector over a JSON document. A selector is dot-separated segments (a dot inside [] belongs to the
+// filter value); each segment is an object key with one optional suffix:
+//
+//	key        the value of the key
+//	key[]      the elements of the array at key
+//	key[k=v]   the elements of the array at key whose property k equals v
+//	key{}      the property names of the object at key
+//
+// The result is every string reached; an object or number is skipped. So `x-events[producer=mcs].payload.properties{}`
+// lists the payload keys of the events of one producer, and `x-agents[].kind` the kind of every agent.
+func selectJSON(doc any, selector string) ([]string, error) {
+	cur := []any{doc}
+	for _, seg := range splitSelector(selector) {
+		key, suffix := seg, ""
+		if i := strings.IndexAny(seg, "[{"); i >= 0 {
+			key, suffix = seg[:i], seg[i:]
+		}
+		var next []any
+		for _, v := range cur {
+			if key != "" {
+				m, ok := v.(map[string]any)
+				if !ok {
+					continue
+				}
+				if v, ok = m[key]; !ok {
+					continue
+				}
+			}
+			switch {
+			case suffix == "":
+				next = append(next, v)
+			case suffix == "{}":
+				for k := range asMap(v) {
+					next = append(next, k)
+				}
+			case suffix == "[]":
+				arr, _ := v.([]any)
+				next = append(next, arr...)
+			case strings.HasPrefix(suffix, "[") && strings.HasSuffix(suffix, "]"):
+				k, want, ok := strings.Cut(suffix[1:len(suffix)-1], "=")
+				if !ok {
+					return nil, fmt.Errorf("selector segment %q: a filter is [key=value]", seg)
+				}
+				arr, _ := v.([]any)
+				for _, e := range arr {
+					if fmt.Sprint(asMap(e)[k]) == want {
+						next = append(next, e)
+					}
+				}
+			default:
+				return nil, fmt.Errorf("selector segment %q: suffix %q is not [], [k=v] or {}", seg, suffix)
+			}
+		}
+		cur = next
+	}
+	var out []string
+	for _, v := range cur {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
 		}
 	}
 	return out, nil
+}
+
+// splitSelector splits on dots outside brackets.
+func splitSelector(s string) []string {
+	var parts []string
+	depth, start := 0, 0
+	for i, r := range s {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case '.':
+			if depth == 0 {
+				parts = append(parts, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, s[start:])
 }
 
 // vocabValues reads the values of a vocabulary file, filtered by `where` (an attribute that is truthy, or `a=b`).
