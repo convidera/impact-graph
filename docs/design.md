@@ -18,8 +18,8 @@ Three concepts, in this order of maturity:
 2. **Review**: given a diff, what is related and absent from it. Built (`impact review`, tests, documents, contracts, callers,
    files that changed together in git history).
 3. **Obligations**: "if A changes, B must change too" (a `Data` class means regenerate the client, a UI change means a test
-   plan). Today they live as prose in AGENTS.md. Planned: declared in `impact.toml`, mined from history (already visible as
-   `co_changed`), or proposed from AGENTS.md and confirmed by a human.
+   plan). Built: declared as `[[obligation]]` in `impact.toml`, reported first by `impact review` (`--strict` for CI) and mined
+   from history as candidates by `impact suggest`. Planned: proposed from AGENTS.md and confirmed by a human.
 
 ## Technical decisions
 
@@ -103,13 +103,19 @@ Detailed in [docs/architecture/impact-integration.md](../../docs/architecture/im
 ## Not built, in order
 
 1. Incremental index by blob hash.
-2. OpenAPI operations and schemas as nodes so a request field joins its column, JSON payload keys of events as nodes, Vuex and
-   event-bus dispatch by string. (TypeScript, Vue and Python symbols, and the HTTP join from a client to a route, are built.)
-3. Stack detection that proposes an `impact.toml`; obligations; an onboarding agent session that opens that pull request.
-4. The platform integration above.
+2. Payload field keys as nodes (an OpenAPI schema's properties joined to the column or struct field behind them, JSON payload keys
+   of events), Vuex and event-bus dispatch by string. (TypeScript, Vue and Python symbols, the HTTP join from a client to a route
+   and OpenAPI operations and schemas as nodes are built.)
+3. Stack detection that proposes an `impact.toml`; an onboarding agent session that opens that pull request. (`impact suggest` mines
+   candidate obligations from history; the rest is not built.)
+4. The catalog and project graph of the platform integration above (the pod side is built).
 5. The knowledge layer: requirement, ticket, decision, documentation section and feature nodes, linked to code by `implements`,
    `refines` and `derived_from` in the order given in the platform section, and SCIP indexes where a language has a good one,
    as an optional precision upgrade.
+
+Built since (v0.7.0): obligations and `impact suggest`, OpenAPI documents as `schema` and `operation` nodes, a bare-word rule for
+vocabulary literals, a generic `json:` source for drift checks, `impact query` for graph browsers and per-repository `impact_review`
+on a merged snapshot (`impact mcp --readonly --checkout`).
 
 Built since: Helm values files as `config` nodes and `[[mount]]` (a values path is the body of a Go struct, joined across
 repositories at merge).

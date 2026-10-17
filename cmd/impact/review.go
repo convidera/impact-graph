@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/convidera/impact-graph/internal/check"
 	"github.com/convidera/impact-graph/internal/config"
@@ -85,18 +86,19 @@ func cmdGolden(args []string) error {
 }
 
 func checkGolden(g *graph.Graph, gd config.Golden) (bool, string) {
-	from, c1 := g.Resolve(gd.From)
-	to, c2 := g.Resolve(gd.To)
-	if from == "" || to == "" {
-		_ = c1
-		_ = c2
-		return false, fmt.Sprintf("endpoint not found (%q or %q)", gd.From, gd.To)
+	from, why := goldenEndpoint(g, "from", gd.From)
+	if from == "" {
+		return false, why
+	}
+	to, why := goldenEndpoint(g, "to", gd.To)
+	if to == "" {
+		return false, why
 	}
 	var via []string
 	for _, v := range gd.Via {
-		id, _ := g.Resolve(v)
+		id, why := goldenEndpoint(g, "waypoint", v)
 		if id == "" {
-			return false, fmt.Sprintf("waypoint %q not found", v)
+			return false, why
 		}
 		via = append(via, id)
 	}
@@ -159,4 +161,26 @@ func cmdCheck(args []string) error {
 		return fmt.Errorf("%d of %d drift checks failed", failed, len(results))
 	}
 	return nil
+}
+
+// goldenEndpoint resolves one end of a golden flow. A name that matches nothing, or several nodes, says which and lists the
+// candidates, so a renamed symbol is found by reading the failure.
+func goldenEndpoint(g *graph.Graph, role, name string) (string, string) {
+	id, cands := g.Resolve(name)
+	if id != "" {
+		return id, ""
+	}
+	if len(cands) == 0 {
+		return "", fmt.Sprintf("%s %q matches no node (renamed or removed? `impact find` lists what exists)", role, name)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %q is ambiguous; name one of:", role, name)
+	for i, n := range cands {
+		if i == 3 {
+			fmt.Fprintf(&b, " ... and %d more", len(cands)-3)
+			break
+		}
+		fmt.Fprintf(&b, " %s", n.ID)
+	}
+	return "", b.String()
 }
