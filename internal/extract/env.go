@@ -19,9 +19,9 @@ import (
 	"github.com/convidera/impact-graph/internal/scan"
 )
 
-// joinConfidence is the confidence of an edge made by a shared name. A shared name is evidence of a link, not proof of one,
-// so it is below the 0.7 that walks use by default: query with --min-confidence 0.6 to follow these edges.
-const joinConfidence = 0.6
+// joinConfidence is the confidence of an edge made by a shared name: a link the code does not show, so it is below a call
+// or a read, and at the default walk threshold (0.7) so that walks follow it.
+const joinConfidence = 0.7
 
 var vueEnv = regexp.MustCompile(`\b(?:import\.meta|process)\.env\.([A-Za-z_][A-Za-z0-9_]*)`)
 

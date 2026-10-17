@@ -54,7 +54,7 @@ consumes it. A name that two services merely read (`MEMCACHED_HOST` in every Lar
 files is not a connection: `impact merge` splits such a node into one copy per repository (`internal/graph/joint.go`). A route,
 a table or a column is never joined by its plain name, because `users` or `GET /api/users` exists in many services for
 unrelated reasons: a join on it would be a guess that a query cannot tell from a fact. Names that every project uses (`PORT`,
-`APP_*`) and images without an owner are left out by a list (`internal/extract/joins.go`).
+`APP_*`) and images without an owner are left out by a list (`internal/extract/joins.go`); the edges they make carry confidence 0.7, a convention rather than a fact.
 
 **Zero configuration first, declared contracts second.** Everything an agent needs from a Laravel or Go repository comes from
 the code. What crosses a process boundary (an event type, a price written into another program's config) needs one declaration

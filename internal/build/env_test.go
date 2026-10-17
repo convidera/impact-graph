@@ -158,8 +158,8 @@ func TestEnvironmentJoinsCarryTheConventionProvenance(t *testing.T) {
 	for _, e := range g.Edges {
 		if strings.HasPrefix(e.Dst, "env:") || strings.HasPrefix(e.Dst, "image:") {
 			joined++
-			if e.Prov != graph.ProvConvention || e.Conf != 0.6 {
-				t.Errorf("%s -> %s: prov %q conf %v, want convention 0.6", e.Src, e.Dst, e.Prov, e.Conf)
+			if e.Prov != graph.ProvConvention || e.Conf != 0.7 {
+				t.Errorf("%s -> %s: prov %q conf %v, want convention 0.7", e.Src, e.Dst, e.Prov, e.Conf)
 			}
 		}
 	}
@@ -203,7 +203,7 @@ func TestMergedRepositoriesJoinThroughEnvAndImageNames(t *testing.T) {
 
 	from := nodeOf(t, g, "acme/app", "app/Adapter.php", graph.TypeMethod)
 	o := graph.DefaultOptions()
-	o.Dir, o.MinConf = "up", 0.5
+	o.Dir = "up"
 	hits, _ := g.Walk(from, o)
 	key := "acme/chart//file:deploy/values.yaml"
 	if hits[key] == nil {

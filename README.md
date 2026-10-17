@@ -294,8 +294,8 @@ variable, a dotenv file that expects it, and the manifests that deploy an image.
 variable, or only deploy the same image, are not connected: each keeps its own copy of the name.
 
 Generic names (`PORT`, `DB_*`, `APP_*`, ...) and images without an owner (`postgres`, `nginx`) never join; the lists are in
-`internal/extract/joins.go`. The edges of these two kinds have confidence 0.6, below the 0.7 that walks use by default, so a
-walk must pass `--min-confidence 0.6` to follow them. Event types, tool names and `[[mount]]` links join as they did. Routes,
+`internal/extract/joins.go`. The edges of these two kinds have confidence 0.7, the default walk threshold, so walks follow
+them without a flag. Event types, tool names and `[[mount]]` links join as they did. Routes,
 tables and columns never join by their plain names: two services that both have a `users` table stay apart.
 
 ## Limits

@@ -87,3 +87,40 @@ func TestRepositoryArgumentIsIgnoredOnASnapshot(t *testing.T) {
 		t.Errorf("a snapshot ignores the repository argument: %v", res[0])
 	}
 }
+
+// joinedGraph is what the extractor makes of an app that reads a variable in PHP and a chart that sets it: one shared
+// node, produced by the chart and consumed by the app, with the default confidence of a joined name.
+func joinedGraph() *graph.Graph {
+	app := graph.New()
+	app.Meta = map[string]string{"repo": "acme/app", "commit": "1111111aaaa"}
+	app.AddNode(graph.Node{ID: "php:Adapter::timeout", Type: graph.TypeMethod, Label: "Adapter::timeout", Path: "app/Adapter.php", Line: 3})
+	app.AddNode(graph.Node{ID: "env:ADAPTER_CLONE_TIMEOUT", Type: graph.TypeValue, Label: "env:ADAPTER_CLONE_TIMEOUT"})
+	app.AddEdgeProv("php:Adapter::timeout", "env:ADAPTER_CLONE_TIMEOUT", graph.Consumes, 0.7, "app/Adapter.php:5 env ADAPTER_CLONE_TIMEOUT", graph.ProvConvention)
+	chart := graph.New()
+	chart.Meta = map[string]string{"repo": "acme/chart", "commit": "2222222bbbb"}
+	chart.AddNode(graph.Node{ID: "file:deploy/values.yaml", Type: graph.TypeFile, Label: "deploy/values.yaml", Path: "deploy/values.yaml"})
+	chart.AddNode(graph.Node{ID: "env:ADAPTER_CLONE_TIMEOUT", Type: graph.TypeValue, Label: "env:ADAPTER_CLONE_TIMEOUT"})
+	chart.AddEdgeProv("file:deploy/values.yaml", "env:ADAPTER_CLONE_TIMEOUT", graph.Produces, 0.7, "deploy/values.yaml:3 env ADAPTER_CLONE_TIMEOUT", graph.ProvConvention)
+	g := graph.Merge(map[string]*graph.Graph{"acme/app": app, "acme/chart": chart})
+	g.Cluster(graph.ClusterOptions{MinSize: 1})
+	return g
+}
+
+func TestDefaultToolsFollowAJoinedName(t *testing.T) {
+	g := joinedGraph()
+	s := New(Source{Root: ".", Load: func() (*graph.Graph, error) { return g, nil }})
+	res := call(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"impact_impact","arguments":{"node":"acme/app//php:Adapter::timeout","direction":"up"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"impact_impact","arguments":{"node":"acme/chart//file:deploy/values.yaml"}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"impact_trace","arguments":{"from":"acme/chart//file:deploy/values.yaml","to":"acme/app//php:Adapter::timeout"}}}`,
+	)
+	if got := text(res[0]); !strings.Contains(got, "acme/chart//file:deploy/values.yaml") {
+		t.Errorf("impact_impact up from the PHP method must reach the chart:\n%s", got)
+	}
+	if got := text(res[1]); !strings.Contains(got, "acme/app//php:Adapter::timeout") {
+		t.Errorf("impact_impact down from the chart must reach the PHP method:\n%s", got)
+	}
+	if isError(res[2]) || !strings.Contains(text(res[2]), "env:ADAPTER_CLONE_TIMEOUT") {
+		t.Errorf("impact_trace from the chart to the PHP method must pass the shared name: %v", res[2])
+	}
+}

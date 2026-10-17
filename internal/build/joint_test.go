@@ -53,7 +53,7 @@ func TestBothReadingAnUnsetNameInEnvExampleAreNotConnected(t *testing.T) {
 		t.Fatal("the name is read by two repositories and set by neither: it must not be one shared node")
 	}
 	o := graph.DefaultOptions()
-	o.Dir, o.MinConf = "up", 0.5 // edges are 0.6 until the next commit raises them to the default threshold
+	o.Dir = "up"
 	hits, _ := g.Walk("acme/shop//php:Cache::host", o)
 	if hits["acme/shop//env:MEMCACHED_HOST"] == nil {
 		t.Fatal("the read must still lead to the name of its own repository")
@@ -77,13 +77,12 @@ func TestReadInCodeAndSetInHelmIsOneConnection(t *testing.T) {
 	}
 	from := nodeOf(t, g, "acme/app", "app/Adapter.php", graph.TypeMethod)
 	o := graph.DefaultOptions()
-	o.Dir, o.MinConf = "up", 0.5 // edges are 0.6 until the next commit raises them to the default threshold
+	o.Dir = "up"
 	hits, _ := g.Walk(from, o)
 	if hits["acme/chart//file:deploy/values.yaml"] == nil {
 		t.Fatal("a walk from the PHP method, with the default options, must reach the values file of acme/chart")
 	}
 	down := graph.DefaultOptions()
-	down.MinConf = 0.5
 	hits, _ = g.Walk("acme/chart//file:deploy/values.yaml", down)
 	if hits[from] == nil {
 		t.Fatal("a change to the values file, walked down with the default options, must reach the PHP method")
@@ -110,7 +109,7 @@ func TestProducerAndConsumerInOneRepositoryStayConnectedAfterAMerge(t *testing.T
 	g := indexed(t, map[string]map[string]string{"acme/app": app, "acme/unrelated": unrelated})
 	from := nodeOf(t, g, "acme/app", "app/Adapter.php", graph.TypeMethod)
 	o := graph.DefaultOptions()
-	o.Dir, o.MinConf = "up", 0.5 // edges are 0.6 until the next commit raises them to the default threshold
+	o.Dir = "up"
 	hits, _ := g.Walk(from, o)
 	if hits["acme/app//file:docker-compose.yml"] == nil {
 		t.Fatal("the read must still reach the compose file of its own repository after the merge")
