@@ -1,0 +1,26 @@
+build:
+  description: Build everything (needs a C compiler, the tree-sitter grammars are cgo)
+  host:
+    - go build ./... "$@"
+
+test:
+  description: go test ./... -cover; args replace the package list
+  host:
+    - if [ $# -eq 0 ]; then set -- ./...; fi; go test "$@" -cover
+
+lint:
+  description: go vet, gofmt check and golangci-lint, as in CI
+  host:
+    - go vet ./...
+    - 'unformatted="$(gofmt -l .)"; if [ -n "$unformatted" ]; then echo "Not gofmt-formatted:" >&2; echo "$unformatted" >&2; exit 1; fi'
+    - golangci-lint run "$@"
+
+fmt:
+  description: gofmt -w .
+  host:
+    - gofmt -w .
+
+impact:
+  description: Build and run the impact CLI from source, e.g. impact index --root .
+  host:
+    - go run ./cmd/impact "$@"

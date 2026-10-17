@@ -316,9 +316,15 @@ tables and columns never join by their plain names: two services that both have 
 ## Develop
 
 ```sh
-impact test        # go test, builds Laravel and Go fixture repositories in temp directories
-impact lint        # golangci-lint, the same configuration as session-runtime
+./devops install   # once: downloads the devops CLI (https://github.com/convidera/devops-cli) to ~/.local/bin
+./devops test      # go test, builds Laravel and Go fixture repositories in temp directories
+./devops lint      # go vet, gofmt check and golangci-lint, as in CI
+./devops fmt       # gofmt -w .
+./devops build     # go build ./...
+./devops impact index --root .   # run the CLI from source
 ```
+
+Coding agents use `devops agents <command>` instead; see `AGENTS.md`.
 
 `internal/graph` (model, walk, SQLite store, merge) and `internal/community` (Leiden clustering) are pure Go. `internal/extract` is the only package that needs cgo: one file per
 language (`php_decl.go`, `php_body.go`, `golang.go`), one for the Laravel pack (`laravel.go`), and the cross-cutting extractors
