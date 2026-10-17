@@ -99,8 +99,8 @@ func (e *envScan) joinImage(kind, from, file string, line int, ref string) {
 	}
 }
 
-// readFile returns the content of a repository file, or false when it is missing or larger than a values file may be.
-func (e *envScan) readFile(file string) ([]byte, bool) {
+// readManifest returns the content of a YAML file, or false when it is missing or larger than the YAML parser's limit.
+func (e *envScan) readManifest(file string) ([]byte, bool) {
 	b, err := os.ReadFile(filepath.Join(e.ctx.Root, file))
 	if err != nil || len(b) > maxYAMLBytes {
 		return nil, false
@@ -108,9 +108,19 @@ func (e *envScan) readFile(file string) ([]byte, bool) {
 	return b, true
 }
 
+// readSource returns the content of a source or dotenv file, or false when it is missing or larger than the scanner's
+// limit (impact.toml max_file_bytes). Files the scanner indexed are within it; the YAML limit does not apply to them.
+func (e *envScan) readSource(file string) ([]byte, bool) {
+	b, err := os.ReadFile(filepath.Join(e.ctx.Root, file))
+	if err != nil || int64(len(b)) > e.ctx.Cfg.Index.MaxBytes {
+		return nil, false
+	}
+	return b, true
+}
+
 // dotenv reads the keys of a dotenv file. The values are not read into the graph.
 func (e *envScan) dotenv(file string) {
-	b, ok := e.readFile(file)
+	b, ok := e.readSource(file)
 	if !ok {
 		return
 	}
@@ -129,7 +139,7 @@ func (e *envScan) dotenv(file string) {
 // manifest reads the environment variables and images of a compose, Kubernetes or Helm YAML file: `environment:` maps and
 // lists, `env:` lists of `- name:` items, and `image:` values (a string, or a Helm `repository:`).
 func (e *envScan) manifest(file string) {
-	b, ok := e.readFile(file)
+	b, ok := e.readManifest(file)
 	if !ok {
 		return
 	}
@@ -200,7 +210,7 @@ func yamlValue(m *yaml.Node, key string) *yaml.Node {
 // workflow reads the images a GitHub workflow pushes: the `images:` and `tags:` inputs of a docker action, and the
 // `docker push` and `docker build -t` commands of its `run:` steps.
 func (e *envScan) workflow(file string) {
-	b, ok := e.readFile(file)
+	b, ok := e.readManifest(file)
 	if !ok {
 		return
 	}
@@ -358,7 +368,7 @@ func (e *envScan) code(files []scan.File) {
 // vue reads the variables of a single-file component with a pattern: its script is not parsed as a tree, so the read is
 // attributed to the file.
 func (e *envScan) vue(file string) {
-	b, ok := e.readFile(file)
+	b, ok := e.readSource(file)
 	if !ok {
 		return
 	}
@@ -371,7 +381,7 @@ func (e *envScan) vue(file string) {
 
 // mentions reports whether a file contains one of the needles, so only the files that may read a variable are parsed.
 func (e *envScan) mentions(file string, needles []string) bool {
-	b, ok := e.readFile(file)
+	b, ok := e.readSource(file)
 	if !ok {
 		return false
 	}
