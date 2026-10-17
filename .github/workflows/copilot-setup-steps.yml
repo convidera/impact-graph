@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+        with:
+          # impact index and impact review read git log (co-change history); same depth as ci.yml
+          fetch-depth: 300
 
       - name: Prepare agent environment
         run: /usr/local/libexec/convidera/copilot-agent-init

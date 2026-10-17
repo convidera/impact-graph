@@ -9,9 +9,9 @@ Drive the project only with `devops agents <command>`. If `command -v devops` fa
 ## Commands (`devops agents help` lists them)
 
 - `bootstrap` – `go mod download` and `go build ./...` (~30 s cold). The session hook runs it for you.
-- `build [pkg]` – `go build ./...`.
+- `build [args]` – `go build ./...`; args replace the package list, flags first: `devops agents build -o /tmp/impact ./cmd/impact`.
 - `test [pkgs/flags]` – `go test ./... -cover` (~10 s). Example: `devops agents test ./internal/graph -run TestWalk`.
-- `lint` – `go vet`, gofmt check and `golangci-lint` (v2, `.golangci.yml`), the same as CI (~15 s).
+- `lint` – `go vet`, gofmt check and `golangci-lint` v2.14.0 (`.golangci.yml`), the same as CI (~15 s). It fails if another golangci-lint version is installed; keep the pin in sync with `ci.yml`.
 - `fmt` – `gofmt -w .`; run it if `lint` reports unformatted files.
 - `impact <args>` – runs the CLI from source (`go run ./cmd/impact`), e.g. `devops agents impact index --root . -q` then `devops agents impact stats --root .`. It writes `.impact/` (gitignored).
 

@@ -1,7 +1,7 @@
 build:
-  description: Build everything (needs a C compiler, the tree-sitter grammars are cgo)
+  description: Build everything (needs a C compiler, the tree-sitter grammars are cgo); args replace the package list
   host:
-    - go build ./... "$@"
+    - if [ $# -eq 0 ]; then set -- ./...; fi; go build "$@"
 
 test:
   description: go test ./... -cover; args replace the package list
