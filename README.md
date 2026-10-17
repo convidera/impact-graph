@@ -288,6 +288,11 @@ Repositories also join without any configuration, through names that are unique 
   of a docker action) and a manifest deploys `registry.example.com/org/app-backend:1.2`; the registry, the tag and the digest
   are dropped, so both name `org/app-backend`.
 
+A name joins repositories only when one side produces it and another side consumes it. Producers are the deployment
+definitions (compose `environment:`, Kubernetes and Helm `env:` lists, workflow pushes); consumers are the code that reads a
+variable, a dotenv file that expects it, and the manifests that deploy an image. Two repositories that only read the same
+variable, or only deploy the same image, are not connected: each keeps its own copy of the name.
+
 Generic names (`PORT`, `DB_*`, `APP_*`, ...) and images without an owner (`postgres`, `nginx`) never join; the lists are in
 `internal/extract/joins.go`. The edges of these two kinds have confidence 0.6, below the 0.7 that walks use by default, so a
 walk must pass `--min-confidence 0.6` to follow them. Event types, tool names and `[[mount]]` links join as they did. Routes,
