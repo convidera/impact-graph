@@ -125,3 +125,20 @@ func hasEdgeTo(g *Graph, src, dst, kind string) bool {
 	}
 	return false
 }
+
+func TestSplitCopiesDoNotShareTheirProps(t *testing.T) {
+	const v = "env:MEMCACHED_HOST"
+	shop, api := repoWith("1111111", v, false), repoWith("2222222", v, false)
+	shop.Nodes[v].Props = map[string]string{"origin": "vocabulary"}
+	api.Nodes[v].Props = map[string]string{"origin": "vocabulary"}
+	m := Merge(map[string]*Graph{"acme/shop": shop, "acme/api": api})
+
+	a, b := m.Nodes[repoID("acme/shop", v)], m.Nodes[repoID("acme/api", v)]
+	if a == nil || b == nil || a.Props["origin"] != "vocabulary" || b.Props["origin"] != "vocabulary" {
+		t.Fatalf("the copies keep the props of the shared node: %+v %+v", a, b)
+	}
+	a.Props["community"] = "7"
+	if _, leaked := b.Props["community"]; leaked {
+		t.Fatalf("clustering one copy must not change the other: %+v", b.Props)
+	}
+}

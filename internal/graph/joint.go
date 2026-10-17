@@ -56,8 +56,11 @@ func splitSharedNames(g *Graph) {
 		}
 		split[v] = true
 		for repo := range repos {
-			n := g.Nodes[v]
-			g.AddNode(Node{ID: repoID(repo, v), Type: n.Type, Label: n.Label, Repo: repo, Props: n.Props})
+			// A copy of its own, props included: clustering writes the community label into the map, and copies that share
+			// one map would write each other's.
+			node := *g.Nodes[v]
+			node.ID, node.Repo, node.Props = repoID(repo, v), repo, cloneProps(node.Props)
+			g.AddNode(node)
 		}
 	}
 	if len(split) == 0 {
@@ -91,4 +94,16 @@ func flows(producers, consumers map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// cloneProps copies a props map; nil stays nil.
+func cloneProps(props map[string]string) map[string]string {
+	if props == nil {
+		return nil
+	}
+	out := make(map[string]string, len(props))
+	for k, v := range props {
+		out[k] = v
+	}
+	return out
 }
