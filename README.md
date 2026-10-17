@@ -300,12 +300,12 @@ prints the candidates instead of guessing.
 
 ## Structured queries for a graph browser
 
-`impact query repos`, `impact query nodes [text] [--repo r] [--type t] [--limit n]` and `impact query node <id>` print JSON: the
+`impact query repos`, `impact query nodes [text] [--repo r] [--type t] [--limit n]`, `impact query node <id>` and `impact query lookup <id>...` (nodes by id, with their degree) print JSON: the
 repositories of a snapshot with commit, build time, node and edge counts per type and how they connect (`shared_values`,
 `direct_edges`), a search over node labels and ids ranked by degree, and one node with up to 60 neighbours per direction
 (kind, confidence, provenance, `file:line`). The types are in `internal/query` and are the contract: a service that shows the
 graph reads this output (with `impact impact --json` and `impact trace --json` for walks) instead of the snapshot's tables,
-which are an implementation detail and change with the schema version.
+which are an implementation detail and change with the schema version. A command whose node or repository argument names nothing in the graph (no match, ambiguous, unknown) exits with status 2 and the reason on stderr; any other failure exits 1.
 
 ## MCP server
 

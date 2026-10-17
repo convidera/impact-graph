@@ -156,9 +156,23 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "impact:", err)
 		pprof.StopCPUProfile()
+		var bad invalidArg
+		if errors.As(err, &bad) {
+			os.Exit(exitInvalidArgument)
+		}
 		os.Exit(1)
 	}
 }
+
+// exitInvalidArgument is the exit status of a command whose argument names nothing in the graph (a node that does not
+// exist or is ambiguous, an unknown repository): the caller's input is wrong, nothing broke. Other failures exit 1.
+const exitInvalidArgument = 2
+
+// invalidArg marks an error as the caller's: see exitInvalidArgument.
+type invalidArg struct{ err error }
+
+func (e invalidArg) Error() string { return e.err.Error() }
+func (e invalidArg) Unwrap() error { return e.err }
 
 func cmdIndex(args []string) error {
 	var c common
@@ -300,14 +314,14 @@ func resolve(g *graph.Graph, text string) (string, error) {
 		return id, nil
 	}
 	if len(cands) == 0 {
-		return "", fmt.Errorf("no node matches %q", text)
+		return "", invalidArg{fmt.Errorf("no node matches %q", text)}
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%q is ambiguous, pick one:", text)
 	for _, n := range cands {
 		fmt.Fprintf(&b, "\n  %s", n.ID)
 	}
-	return "", fmt.Errorf("%s", b.String())
+	return "", invalidArg{fmt.Errorf("%s", b.String())}
 }
 
 func cmdImpact(args []string) error {

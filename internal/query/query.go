@@ -284,3 +284,16 @@ func (x *Index) Detail(id string) (NodeDetail, error) {
 	out.Incoming, out.IncomingTotal = collect(x.g.In(id), func(e *graph.Edge) string { return e.Src })
 	return out, nil
 }
+
+// Lookup returns the nodes with the given ids, with their degree; an id that is not in the graph is left out.
+func (x *Index) Lookup(ids []string) Nodes {
+	out := Nodes{Nodes: []Node{}}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if n := x.g.Nodes[id]; n != nil && !seen[id] {
+			seen[id] = true
+			out.Nodes = append(out.Nodes, x.node(n))
+		}
+	}
+	return out
+}

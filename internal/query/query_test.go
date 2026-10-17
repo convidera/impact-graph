@@ -119,3 +119,10 @@ func TestDetailListsNeighboursBestFirstAndCaps(t *testing.T) {
 		t.Errorf("missing node: %v", err)
 	}
 }
+
+func TestLookupReturnsKnownNodesOnceWithTheirDegree(t *testing.T) {
+	got := New(merged()).Lookup([]string{"event:order", "missing", "event:order", "acme/api//php:Order"})
+	if len(got.Nodes) != 2 || got.Nodes[0].ID != "event:order" || got.Nodes[0].Degree != 2 || got.Nodes[1].Degree != 1 {
+		t.Errorf("%+v", got.Nodes)
+	}
+}

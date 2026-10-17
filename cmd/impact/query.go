@@ -14,7 +14,7 @@ import (
 // is the contract of internal/query; walks and traces have their own --json.
 func cmdQuery(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: impact query repos | nodes [text] | node <id>  [--db file] [--repo owner/name] [--type t] [--limit n]")
+		return errors.New("usage: impact query repos | nodes [text] | node <id> | lookup <id>...  [--db file] [--repo owner/name] [--type t] [--limit n]")
 	}
 	what, args := args[0], args[1:]
 	var c common
@@ -43,7 +43,7 @@ func cmdQuery(args []string) error {
 		}
 		out, err := x.Search(*repo, text, *typ, *limit)
 		if err != nil {
-			return err
+			return invalidArg{err}
 		}
 		return enc.Encode(out)
 	case "node":
@@ -52,9 +52,11 @@ func cmdQuery(args []string) error {
 		}
 		out, err := x.Detail(pos[0])
 		if err != nil {
-			return fmt.Errorf("%w: %s", err, pos[0])
+			return invalidArg{fmt.Errorf("%w: %s", err, pos[0])}
 		}
 		return enc.Encode(out)
+	case "lookup":
+		return enc.Encode(x.Lookup(pos))
 	}
-	return fmt.Errorf("unknown query %q (repos, nodes, node)", what)
+	return invalidArg{fmt.Errorf("unknown query %q (repos, nodes, node, lookup)", what)}
 }
