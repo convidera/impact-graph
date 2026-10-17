@@ -137,6 +137,37 @@ func TestReadOnlyServerHidesWhatNeedsAWorkingTree(t *testing.T) {
 	}
 }
 
+func TestEveryToolSchemaHasARequiredArrayNeverNull(t *testing.T) {
+	for _, readOnly := range []bool{false, true} {
+		s := New(Source{ReadOnly: readOnly, Load: func() (*graph.Graph, error) { return testGraph(), nil }})
+		var out bytes.Buffer
+		if err := s.Serve(strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`+"\n"), &out); err != nil {
+			t.Fatal(err)
+		}
+		var res struct {
+			Result struct {
+				Tools []struct {
+					Name        string `json:"name"`
+					InputSchema struct {
+						Required *[]string `json:"required"`
+					} `json:"inputSchema"`
+				} `json:"tools"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Result.Tools) == 0 {
+			t.Fatal("no tools listed")
+		}
+		for _, tool := range res.Result.Tools {
+			if tool.InputSchema.Required == nil {
+				t.Errorf("readOnly=%v: %s has required: null (strict MCP clients reject the whole list)", readOnly, tool.Name)
+			}
+		}
+	}
+}
+
 // MCP clients (OpenCode 2.0.25) validate the tool list and drop the whole server when an inputSchema.required is null.
 func TestEveryToolSchemaHasARequiredArray(t *testing.T) {
 	s := New(Source{Root: ".", Load: func() (*graph.Graph, error) { return testGraph(), nil }, Reindex: func() (string, error) { return "ok", nil }})
