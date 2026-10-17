@@ -114,13 +114,14 @@ type Vocabulary struct {
 //	ignore = ["heartbeat"]                  # found values to skip
 //	skip_tests = true                       # leave test files out of `files`
 //	blocks = "appendEvent\\((.*?)\\);"        # optional: apply extract inside every match of this (group 1)
-//	found_source = "openapi-event-types:integration/adapter-api.json"   # values from a generated document instead of code
+//	found_source = "json:integration/adapter-api.json#x-event-types[].type"   # values from a document instead of code
 //	add = ["message"]                       # allowed on top of the vocabulary
 //
 // A source is `openapi-schema:<file>#<Schema>` (property names), `openapi-paths:<file>`, `openapi-operations:<file>`,
-// `openapi-event-types:<file>`, `openapi-extension:<file>#<x-key>`, `registry-list:<file>#a.b`,
-// `registry-keys:<file>#a.b/key`, `registry-payload-keys:<file>#<producer>`, `registry-family-keys:<file>#<prefix>`,
-// `go-struct:<file>#<Type>` (json names) or `go-struct-required:<file>#<Type>` (those without omitempty); a list unions them.
+// `go-struct:<file>#<Type>` (json names, read with the Go parser) or `go-struct-required:<file>#<Type>` (those without
+// omitempty), or `json:<file>#<selector>` for any other JSON document: dot-separated keys, each with an optional `[]` (the
+// elements of an array), `[k=v]` (the elements whose k equals v) or `{}` (the property names of an object), for example
+// `x-events[producer=mcs].payload.properties{}`; a list unions them.
 type Check struct {
 	Name        string   `toml:"name"`
 	Vocabulary  string   `toml:"vocabulary"`

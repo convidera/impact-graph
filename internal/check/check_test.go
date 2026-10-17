@@ -1,8 +1,10 @@
 package check
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -139,7 +141,7 @@ func TestSources(t *testing.T) {
  "components": {"schemas": {"Req": {"properties": {"p": {}, "q": {}}}}},
  "x-event-types": [{"type": "t1"}], "x-kinds": ["k1", "k2"]}`,
 		"reg.json": registry,
-		"types.go": "package x\n\ntype Spec struct {\n\tA string `json:\"a\"`\n\tB string `json:\"b,omitempty\"`\n\tC string `json:\"-\"`\n}\n",
+		"types.go": "package x\n\ntype Base struct {\n\tZ string `json:\"z\"`\n}\n\ntype Spec struct {\n\tBase `json:\",inline\"`\n\tA string `json:\"a\"`\n\tB string `json:\"b,omitempty\"`\n\tC string `json:\"-\"`\n\td string\n}\n",
 		"use.php":  "$x = ['p' => 1, 'q' => 2]; call('/v1/b'); call('/v1/a/' . $id);\n",
 		"keys.php": "keys: a b\n",
 	}
@@ -159,7 +161,7 @@ mode = "equal"
 
 [[check]]
 name = "event types and extension"
-source = ["openapi-event-types:doc.json", "openapi-extension:doc.json#x-kinds"]
+source = ["json:doc.json#x-event-types[].type", "json:doc.json#x-kinds[]"]
 files = ["keys.php"]
 extract = "(\\w+)"
 mode = "subset"
@@ -167,8 +169,8 @@ add = ["keys", "a", "b"]
 
 [[check]]
 name = "registry keys and lists"
-source = ["registry-list:reg.json#x-list.k", "registry-keys:reg.json#x-objs/id", "registry-payload-keys:reg.json#adapter"]
-found_source = "registry-keys:reg.json#x-objs/id"
+source = ["json:reg.json#x-list.k[]", "json:reg.json#x-objs[].id", "json:reg.json#x-events[producer=adapter].payload.properties{}"]
+found_source = "json:reg.json#x-objs[].id"
 mode = "subset"
 
 [[check]]
@@ -202,5 +204,55 @@ extract = "x"
 	}
 	if rs["unknown source"].OK {
 		t.Errorf("an unknown source kind fails")
+	}
+}
+
+func TestSelectJSON(t *testing.T) {
+	var doc any
+	if err := json.Unmarshal([]byte(registry), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		sel  string
+		want string
+	}{
+		{"x-list.k[]", "x,y"},
+		{"x-objs[].id", "o1,o2"},
+		{"x-events[producer=adapter].payload.properties{}", "p1,p2"},
+		{"x-events[named=true].name", "a,c"},
+		{"x-events[].name", "a,b,c"},
+		{"x-missing[].name", ""},
+		{"x-list.k", ""}, // an array is not a string
+	} {
+		got, err := selectJSON(doc, c.sel)
+		if err != nil {
+			t.Errorf("%s: %v", c.sel, err)
+			continue
+		}
+		sort.Strings(got)
+		if strings.Join(got, ",") != c.want {
+			t.Errorf("%s: got %v, want %s", c.sel, got, c.want)
+		}
+	}
+	for _, bad := range []string{"x-events[producer]", "x-events[]x"} {
+		if _, err := selectJSON(doc, bad); err == nil {
+			t.Errorf("%s should be rejected", bad)
+		}
+	}
+	if got := splitSelector("a[k=v.w].b{}"); len(got) != 2 || got[0] != "a[k=v.w]" {
+		t.Errorf("a dot inside a filter does not split: %v", got)
+	}
+}
+
+func TestRemovedSourceKindsExplainTheReplacement(t *testing.T) {
+	rs := run(t, map[string]string{"reg.json": registry, "use.php": "x"}, `
+[[check]]
+name = "old"
+source = "registry-list:reg.json#x-list.k"
+files = ["use.php"]
+extract = "x"
+`)
+	if rs["old"].OK || !strings.Contains(strings.Join(rs["old"].Problems, " "), "json:<file>#<selector>") {
+		t.Errorf("the error names the replacement: %+v", rs["old"])
 	}
 }
