@@ -256,6 +256,23 @@ prints the candidates instead of guessing.
 `impact_overview`, `impact_community` and `impact_god_nodes` over newline-delimited JSON-RPC on stdio. An agent calls `impact_impact` while it plans a change and `impact_review` before it
 finishes. See [docs/design.md](docs/design.md) for how this becomes a platform feature.
 
+## Several repositories
+
+`impact merge a.db b.db --out m.db` combines the snapshots of several repositories into one graph. Each node keeps its
+repository (ids become `owner/name//<id>`), and the repositories meet only where they share a value: an event type, a tool
+name, a `[[mount]]` that matches a values key. A query that should stay in one repository says so:
+
+```sh
+impact overview --repo acme/api           # the map of one repository of the merge
+impact find Order --repo api              # a unique name without the owner also works
+impact hubs --repo acme/api
+impact communities --repo acme/api
+```
+
+The MCP tools `impact_find`, `impact_overview`, `impact_god_nodes` and `impact_community` take the same `repository`
+argument. On a snapshot of one repository the argument is accepted and ignored. Shared values are left out of the lists and
+counted apart.
+
 ## Limits
 
 - Resolution is by declared types, docblocks and conventions, not a type checker. An untyped receiver produces no edge (or a

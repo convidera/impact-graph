@@ -14,6 +14,7 @@ func cmdOverview(args []string) error {
 	c.flags(fs)
 	communities := fs.Int("communities", 8, "communities to list")
 	gods := fs.Int("gods", 8, "god nodes to list")
+	repo := fs.String("repo", "", "only this repository of a merged graph, as owner/name")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -21,7 +22,11 @@ func cmdOverview(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Print(report.Overview(g, *communities, *gods))
+	r, err := g.ResolveRepo(*repo)
+	if err != nil {
+		return err
+	}
+	fmt.Print(report.OverviewIn(g, r, *communities, *gods))
 	return nil
 }
 
@@ -33,6 +38,7 @@ func cmdCommunities(args []string) error {
 	id := fs.Int("id", -1, "show the members of this community")
 	limit := fs.Int("limit", 20, "ids to list per member type with --id")
 	recluster := fs.Bool("recluster", false, "recompute the communities in memory with the options below; the snapshot is not written")
+	repo := fs.String("repo", "", "only this repository of a merged graph, as owner/name")
 	resolution := fs.Float64("resolution", 0, "with --recluster: modularity resolution, higher gives smaller communities (0 = configured value)")
 	hubPercentile := fs.Float64("hub-percentile", -1, "with --recluster: leave out nodes above this degree percentile, 0 disables (-1 = configured value)")
 	if _, err := parse(fs, args); err != nil {
@@ -53,10 +59,14 @@ func cmdCommunities(args []string) error {
 		g.Cluster(o)
 		fmt.Fprintf(os.Stderr, "reclustered in memory: resolution %g, hub percentile %g; the snapshot is unchanged\n", o.Resolution, o.HubPercentile)
 	}
+	r, err := g.ResolveRepo(*repo)
+	if err != nil {
+		return err
+	}
 	if *id >= 0 {
-		fmt.Print(report.Community(g, *id, *limit))
+		fmt.Print(report.CommunityIn(g, r, *id, *limit))
 		return nil
 	}
-	fmt.Print(report.Communities(g, *top))
+	fmt.Print(report.CommunitiesIn(g, r, *top))
 	return nil
 }

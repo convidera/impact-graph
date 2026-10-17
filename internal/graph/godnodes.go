@@ -6,6 +6,7 @@ import "sort"
 type GodOptions struct {
 	Types     []string // restrict to these node types; empty = all eligible
 	MinDegree int      // drop nodes below this degree; default 1
+	Repo      string   // only nodes of this repository; empty = all. Their degree still counts every neighbour
 }
 
 // GodNode is a node many other symbols are connected to: a place where a change is likely to spread.
@@ -62,7 +63,7 @@ func (g *Graph) GodNodes(top int, o GodOptions) []GodNode {
 
 	var out []GodNode
 	for i, x := range nodes {
-		if !eligible[i] || x.Props["file_kind"] == "generated" || (len(types) > 0 && !types[x.Type]) {
+		if !eligible[i] || x.Props["file_kind"] == "generated" || (len(types) > 0 && !types[x.Type]) || !g.InRepo(x, o.Repo) {
 			continue
 		}
 		list := adj[i]

@@ -22,9 +22,9 @@ const usage = `impact: ask a repository what a change influences.
 
   impact index                      build the graph (.impact/graph.db)
   impact stats                      node, edge and community counts, schema and engine versions
-  impact overview                   the repository map: snapshot, layers, communities, god nodes, contracts
+  impact overview                   the repository map: snapshot, layers, communities, god nodes, contracts (--repo owner/name: one repository of a merge)
   impact communities                the subsystems clustering found (--id N: one of them; --recluster: tune it in memory)
-  impact find <text>                locate nodes by id or label
+  impact find <text>                locate nodes by id or label (--repo owner/name: one repository of a merge)
   impact impact <node>              what a change to <node> can affect (-d up: what can affect it)
   impact trace <from> <to>          the cheapest path a value or a change takes from <from> to <to>
   impact meet <a> <b>               the columns, fields and events two things share: how <a> reaches <b>
@@ -240,19 +240,24 @@ func cmdFind(args []string) error {
 	c.flags(fs)
 	limit := fs.Int("limit", 30, "max results")
 	asJSON := fs.Bool("json", false, "JSON output")
+	repo := fs.String("repo", "", "only this repository of a merged graph, as owner/name")
 	pos, err := parse(fs, args)
 	if err != nil || len(pos) != 1 {
-		return fmt.Errorf("usage: impact find <text>")
+		return fmt.Errorf("usage: impact find <text> [--repo owner/name]")
 	}
 	g, _, err := c.graph()
 	if err != nil {
 		return err
 	}
-	found := g.Find(pos[0], *limit)
+	r, err := g.ResolveRepo(*repo)
+	if err != nil {
+		return err
+	}
+	found := g.FindIn(pos[0], *limit, r)
 	if *asJSON {
 		return json.NewEncoder(os.Stdout).Encode(found)
 	}
-	fmt.Print(report.Find(g, pos[0], *limit))
+	fmt.Print(report.FindIn(g, r, pos[0], *limit))
 	return nil
 }
 
@@ -396,6 +401,7 @@ func cmdHubs(args []string) error {
 	c.flags(fs)
 	top := fs.Int("top", 20, "rows")
 	typ := fs.String("type", "", "only nodes of this type (class, method, table, route, ...)")
+	repo := fs.String("repo", "", "only this repository of a merged graph, as owner/name")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -403,11 +409,15 @@ func cmdHubs(args []string) error {
 	if err != nil {
 		return err
 	}
+	r, err := g.ResolveRepo(*repo)
+	if err != nil {
+		return err
+	}
 	var types []string
 	if *typ != "" {
 		types = []string{*typ}
 	}
-	fmt.Print(report.GodNodes(g, g.GodNodes(*top, graph.GodOptions{Types: types})))
+	fmt.Print(report.GodNodes(g, g.GodNodes(*top, graph.GodOptions{Types: types, Repo: r})))
 	return nil
 }
 
