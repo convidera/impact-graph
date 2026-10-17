@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/convidera/impact-graph/internal/config"
 	"github.com/convidera/impact-graph/internal/graph"
 	"github.com/convidera/impact-graph/internal/report"
 	"github.com/convidera/impact-graph/internal/review"
@@ -20,6 +21,8 @@ type Source struct {
 	Root    string
 	Load    func() (*graph.Graph, error)
 	Reindex func() (string, error)
+	// Obligations are the declared companion-change rules impact_review checks (impact.toml); may be empty.
+	Obligations []config.Obligation
 	// ReadOnly serves a stored snapshot that has no working tree behind it (for example the merged snapshot of several
 	// repositories): impact_reindex and impact_review are neither listed nor callable.
 	ReadOnly bool
@@ -184,7 +187,7 @@ func allTools() []map[string]any {
 		},
 		{
 			"name":        "impact_review",
-			"description": "Review the working tree against a base commit: lists the tests, documents, contracts, callers and historically co-changed files that the change is related to but does not contain. Call it before finishing.",
+			"description": "Review the working tree against a base commit: lists the tests, documents, contracts, callers and historically co-changed files that the change is related to but does not contain. Call it before finishing: it also lists the obligations (companion changes the repository's own rules demand, such as a regenerated client or a changelog entry) that the change has not met.",
 			"inputSchema": obj(map[string]any{"base": str("base", "commit to compare with; default is the branch's upstream or merge base")}),
 		},
 		{
@@ -415,7 +418,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return review.Text(review.Run(g, base, changes, review.DefaultOptions()), 12), nil
+		o := review.DefaultOptions()
+		o.Obligations = s.src.Obligations
+		return review.Text(review.Run(g, base, changes, o), 12), nil
 	}
 	return "", fmt.Errorf("unknown tool %s", name)
 }

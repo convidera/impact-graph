@@ -43,7 +43,7 @@ func cmdMCP(args []string) error {
 		}
 		return graph.Load(db)
 	}
-	srv := mcp.New(mcp.Source{Root: c.root, Load: load, Reindex: reindex})
+	srv := mcp.New(mcp.Source{Root: c.root, Load: load, Reindex: reindex, Obligations: cfg.Obligation})
 	fmt.Fprintln(os.Stderr, "impact: MCP server on stdio for", c.root)
 	return srv.Serve(os.Stdin, os.Stdout)
 }
