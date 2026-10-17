@@ -203,10 +203,11 @@ func Meet(g *graph.Graph, a, b string, ms []graph.Meeting, limit int) string {
 // Communities lists the communities of the graph, largest first; top <= 0 lists all of them.
 func Communities(g *graph.Graph, top int) string { return CommunitiesIn(g, "", top) }
 
-// CommunitiesIn is Communities restricted to the communities that belong to a repository ("" for all of them).
+// CommunitiesIn is Communities restricted to one repository of a merged graph ("" for all of them): the communities that
+// have members in it, with that repository's share of each (see scoped).
 func CommunitiesIn(g *graph.Graph, repo string, top int) string {
 	var b strings.Builder
-	ranked := ownedBy(g, repo, sortedCommunities(g))
+	ranked := scoped(g, repo, sortedCommunities(g))
 	fmt.Fprintf(&b, "communities (%d):\n", len(ranked))
 	for i, c := range ranked {
 		if top > 0 && i >= top {
@@ -222,11 +223,21 @@ func CommunitiesIn(g *graph.Graph, repo string, top int) string {
 // caps the ids listed per type; limit <= 0 lists them all. An unknown id is reported as text, not as an error.
 func Community(g *graph.Graph, id, limit int) string { return CommunityIn(g, "", id, limit) }
 
-// CommunityIn is Community for the members of one repository ("" for all of them). A community that belongs to another
-// repository is reported as not found there.
+// CommunityIn is Community for one repository of a merged graph ("" for all of them). For a repository the size, the top
+// members and the cohesion are those of its own members (see scoped), so a community that spans repositories is never
+// shown with the size or cohesion of the whole; its label still describes the whole community. A community that has no
+// member in the repository is reported as not found there.
 func CommunityIn(g *graph.Graph, repo string, id, limit int) string {
-	c, ok := findCommunity(g, id)
-	if !ok || len(ownedBy(g, repo, []graph.Community{c})) == 0 {
+	whole, ok := findCommunity(g, id)
+	c := whole
+	if ok && repo != "" {
+		share := scoped(g, repo, []graph.Community{whole})
+		ok = len(share) > 0
+		if ok {
+			c = share[0]
+		}
+	}
+	if !ok {
 		if repo != "" {
 			return fmt.Sprintf("no community %d in %s", id, repo)
 		}
@@ -237,11 +248,15 @@ func CommunityIn(g *graph.Graph, repo string, id, limit int) string {
 	if c.Dir != "" {
 		fmt.Fprintf(&b, "dir       %s\n", c.Dir)
 	}
-	fmt.Fprintf(&b, "size      %d nodes\n", c.Size)
+	if repo != "" {
+		fmt.Fprintf(&b, "size      %d nodes in %s (the community has %d)\n", c.Size, repo, whole.Size)
+	} else {
+		fmt.Fprintf(&b, "size      %d nodes\n", c.Size)
+	}
 	fmt.Fprintf(&b, "cohesion  %.2f\n", c.Cohesion)
-	if top := keptTop(g, repo, c.Top); len(top) > 0 {
+	if len(c.Top) > 0 {
 		b.WriteString("\ntop members:\n")
-		for _, id := range top {
+		for _, id := range c.Top {
 			fmt.Fprintf(&b, "  %s  %s\n", id, Where(g.Nodes[id]))
 		}
 	}
@@ -410,7 +425,7 @@ func OverviewIn(g *graph.Graph, repo string, communities, gods int) string {
 	fmt.Fprintf(&b, "layers: %s\n", countsLine(layers, []string{graph.LayerFile, graph.LayerCode, graph.LayerContract, graph.LayerKnowledge}))
 	fmt.Fprintf(&b, "types:  %s\n", countsLine(types, sortedKeys(types)))
 
-	ranked := ownedBy(g, repo, sortedCommunities(g))
+	ranked := scoped(g, repo, sortedCommunities(g))
 	fmt.Fprintf(&b, "\ncommunities (%d):\n", len(ranked))
 	if communities > 0 && communities < len(ranked) {
 		ranked = ranked[:communities]
@@ -418,8 +433,7 @@ func OverviewIn(g *graph.Graph, repo string, communities, gods int) string {
 	for _, c := range ranked {
 		fmt.Fprintf(&b, "c%d  %d nodes  cohesion %.2f  %s\n", c.ID, c.Size, c.Cohesion, c.Label)
 		var labels []string
-		top := keptTop(g, repo, c.Top)
-		for _, id := range top[:min(3, len(top))] {
+		for _, id := range c.Top[:min(3, len(c.Top))] {
 			labels = append(labels, labelOf(g, id))
 		}
 		if len(labels) > 0 {
@@ -504,60 +518,29 @@ func sortedCommunities(g *graph.Graph) []graph.Community {
 	return out
 }
 
-// ownedBy keeps the communities that belong to a repository; "" keeps all of them.
-func ownedBy(g *graph.Graph, repo string, comms []graph.Community) []graph.Community {
+// scoped returns the communities that a repository has members in, each as a copy that carries the repository's share
+// (graph.CommunityShares): its size, its most connected members and its cohesion. Largest share first, ties by id. repo ""
+// returns the communities unchanged.
+func scoped(g *graph.Graph, repo string, comms []graph.Community) []graph.Community {
 	if repo == "" {
 		return comms
 	}
-	owner := communityRepos(g)
+	shares := g.CommunityShares()
 	var out []graph.Community
 	for _, c := range comms {
-		if owner[c.ID] == repo {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// keptTop keeps the member ids that belong to a repository; "" keeps all of them.
-func keptTop(g *graph.Graph, repo string, ids []string) []string {
-	if repo == "" {
-		return ids
-	}
-	var out []string
-	for _, id := range ids {
-		if n := g.Nodes[id]; n != nil && g.InRepo(n, repo) {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-// communityRepos names the repository each community belongs to: the one most of its members come from, ties going to
-// the smaller name. Shared values belong to no repository and do not count.
-func communityRepos(g *graph.Graph) map[int]string {
-	counts := map[int]map[string]int{}
-	for _, n := range g.Nodes {
-		c, ok := n.Props["community"]
-		if !ok || n.Repo == "" {
-			continue
-		}
-		id := atoi(c)
-		if counts[id] == nil {
-			counts[id] = map[string]int{}
-		}
-		counts[id][n.Repo]++
-	}
-	out := make(map[int]string, len(counts))
-	for id, m := range counts {
-		best, bestN := "", 0
-		for r, k := range m {
-			if k > bestN || (k == bestN && r < best) {
-				best, bestN = r, k
+		for _, sh := range shares[c.ID] {
+			if sh.Repo == repo {
+				c.Size, c.Top, c.Cohesion = sh.Size, sh.Top, sh.Cohesion
+				out = append(out, c)
 			}
 		}
-		out[id] = best
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Size != out[j].Size {
+			return out[i].Size > out[j].Size
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
