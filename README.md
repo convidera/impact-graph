@@ -273,6 +273,12 @@ The MCP tools `impact_find`, `impact_overview`, `impact_god_nodes` and `impact_c
 argument. On a snapshot of one repository the argument is accepted and ignored. Shared values are left out of the lists and
 counted apart.
 
+`impact overview` on a merge starts with one line per repository (nodes, edges, commit) and then says how the repositories
+connect: `cross-repository edges` counts the edges straight from one repository's own nodes to another's, and
+`connected through shared values` the shared values that reach two or more of them. Two repositories that connect to
+nothing get a note; with several repositories, the pairs that do not connect are listed. `impact merge` prints the same
+block to stderr. `impact find` and `impact_find` say how many hits each repository contributed.
+
 ## Limits
 
 - Resolution is by declared types, docblocks and conventions, not a type checker. An untyped receiver produces no edge (or a

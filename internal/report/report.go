@@ -24,10 +24,15 @@ func Where(n *graph.Node) string {
 // Find lists the nodes that match text.
 func Find(g *graph.Graph, text string, limit int) string { return FindIn(g, "", text, limit) }
 
-// FindIn is Find restricted to a repository ("" for all of them).
+// FindIn is Find restricted to a repository ("" for all of them). Hits of several repositories of a merged graph start with
+// a line that counts them per repository.
 func FindIn(g *graph.Graph, repo, text string, limit int) string {
 	var b strings.Builder
-	for _, n := range g.FindIn(text, limit, repo) {
+	hits := g.FindIn(text, limit, repo)
+	if line := hitsByRepo(hits); repo == "" && line != "" {
+		b.WriteString(line + "\n")
+	}
+	for _, n := range hits {
 		fmt.Fprintf(&b, "%-9s %s  %s\n", n.Type, n.ID, Where(n))
 	}
 	return b.String()
@@ -286,6 +291,94 @@ func Overview(g *graph.Graph, communities, gods int) string {
 	return OverviewIn(g, "", communities, gods)
 }
 
+// RepoBlock lists the repositories of a merged graph with their size and commit, the shared values, and how the
+// repositories connect: through an edge between their own nodes, or through the shared values both reach. Two repositories
+// that connect to nothing get a note, and a graph where only some pairs connect lists the pairs that do not. It is empty for
+// a snapshot and for a merge of one repository.
+func RepoBlock(g *graph.Graph) string {
+	stats := g.RepoStats()
+	if len(stats) < 2 {
+		return ""
+	}
+	var b strings.Builder
+	for _, s := range stats {
+		line := fmt.Sprintf("  %s  %s nodes  %s edges", s.Repo, groupDigits(s.Nodes), groupDigits(s.Edges))
+		if c := s.Commit; c != "" {
+			if len(c) > 7 {
+				c = c[:7]
+			}
+			line += "  commit " + c
+		}
+		b.WriteString(line + "\n")
+	}
+	l := g.Links()
+	fmt.Fprintf(&b, "  shared values: %s\n", groupDigits(l.Shared))
+	fmt.Fprintf(&b, "  cross-repository edges: %s\n", groupDigits(l.Cross))
+	fmt.Fprintf(&b, "  connected through shared values: %s\n", groupDigits(l.Through))
+	if l.Cross == 0 && l.Through == 0 {
+		b.WriteString("note: these repositories share no contract with each other; a query in one never reaches the other.\n")
+	} else if un := unconnected(stats, l.Pairs); len(un) > 0 {
+		fmt.Fprintf(&b, "not connected: %s\n", strings.Join(un, ", "))
+	}
+	return b.String()
+}
+
+// unconnected lists the pairs of repositories with no connection, as "a <-> b".
+func unconnected(stats []graph.RepoStat, connected []graph.RepoPair) []string {
+	linked := map[[2]string]bool{}
+	for _, p := range connected {
+		linked[[2]string{p.A, p.B}] = true
+	}
+	var out []string
+	for i := range stats {
+		for j := i + 1; j < len(stats); j++ {
+			a, b := stats[i].Repo, stats[j].Repo
+			if !linked[[2]string{a, b}] {
+				out = append(out, a+" <-> "+b)
+			}
+		}
+	}
+	return out
+}
+
+// hitsByRepo counts search hits per repository, for a line that says where they come from. It is empty unless the hits
+// come from two or more repositories.
+func hitsByRepo(hits []*graph.Node) string {
+	counts := map[string]int{}
+	shared := 0
+	for _, n := range hits {
+		if n.Repo == "" {
+			shared++
+		} else {
+			counts[n.Repo]++
+		}
+	}
+	if len(counts) < 2 {
+		return ""
+	}
+	var parts []string
+	for _, r := range sortedKeys(counts) {
+		parts = append(parts, fmt.Sprintf("%d in %s", counts[r], r))
+	}
+	if shared > 0 {
+		parts = append(parts, fmt.Sprintf("%d shared values", shared))
+	}
+	return fmt.Sprintf("%d hits: %s (use repository to restrict)", len(hits), strings.Join(parts, ", "))
+}
+
+// groupDigits writes n with a comma every three digits: 12525 is 12,525.
+func groupDigits(n int) string {
+	s := strconv.Itoa(n)
+	var out []byte
+	for i := range len(s) {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, s[i])
+	}
+	return string(out)
+}
+
 // OverviewIn is Overview of one repository of a merged graph ("" for the whole graph): its nodes and edges, its communities
 // and its god nodes, with the shared values it reaches counted apart.
 func OverviewIn(g *graph.Graph, repo string, communities, gods int) string {
@@ -311,6 +404,8 @@ func OverviewIn(g *graph.Graph, repo string, communities, gods int) string {
 	fmt.Fprintf(&b, "nodes %d, edges %d\n", nodes, edges)
 	if repo != "" {
 		fmt.Fprintf(&b, "shared values: %d (reached from this repository)\n", len(shared))
+	} else {
+		b.WriteString(RepoBlock(g))
 	}
 	fmt.Fprintf(&b, "layers: %s\n", countsLine(layers, []string{graph.LayerFile, graph.LayerCode, graph.LayerContract, graph.LayerKnowledge}))
 	fmt.Fprintf(&b, "types:  %s\n", countsLine(types, sortedKeys(types)))

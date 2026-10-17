@@ -91,3 +91,39 @@ func TestFindAndGodNodesRestrictToARepository(t *testing.T) {
 		t.Errorf("a god node of a repository keeps the degree of all its neighbours: %+v", gods)
 	}
 }
+
+func TestRepoStatsAndLinks(t *testing.T) {
+	g := mergedRepos()
+	stats := g.RepoStats()
+	want := []RepoStat{
+		{Repo: "acme/api", Commit: "2222222", Nodes: 1, Edges: 1},
+		{Repo: "acme/shop", Commit: "1111111", Nodes: 1, Edges: 1},
+		{Repo: "other/api", Nodes: 1, Edges: 0},
+	}
+	if len(stats) != len(want) {
+		t.Fatalf("stats = %+v", stats)
+	}
+	for i := range want {
+		if stats[i] != want[i] {
+			t.Errorf("stats[%d] = %+v, want %+v", i, stats[i], want[i])
+		}
+	}
+	l := g.Links()
+	if l.Shared != 1 || l.Through != 1 || l.Cross != 0 {
+		t.Errorf("links = %+v", l)
+	}
+	if len(l.Pairs) != 1 || l.Pairs[0] != (RepoPair{A: "acme/api", B: "acme/shop", Values: 1}) {
+		t.Errorf("pairs = %+v", l.Pairs)
+	}
+}
+
+func TestRepoStatsOfASnapshotIsEmpty(t *testing.T) {
+	g := New()
+	g.AddNode(Node{ID: "php:A", Type: TypeClass, Label: "A", Repo: "acme/shop"})
+	if s := g.RepoStats(); s != nil {
+		t.Errorf("a snapshot has no repositories to count: %+v", s)
+	}
+	if l := g.Links(); l.Through != 0 || len(l.Pairs) != 0 {
+		t.Errorf("a snapshot has no links: %+v", l)
+	}
+}

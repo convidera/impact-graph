@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/convidera/impact-graph/internal/graph"
+	"github.com/convidera/impact-graph/internal/report"
 )
 
 func cmdMerge(args []string) error {
@@ -40,5 +42,6 @@ func cmdMerge(args []string) error {
 		return err
 	}
 	fmt.Printf("merged %d repositories -> %d nodes, %d edges, %d communities\n", len(parts), len(m.Nodes), len(m.Edges), len(m.Communities))
+	fmt.Fprint(os.Stderr, report.RepoBlock(m))
 	return nil
 }

@@ -84,7 +84,7 @@ type RepoStat struct {
 // RepoStats counts the nodes and edges of each repository of a merged graph, sorted by name; nil for a snapshot.
 func (g *Graph) RepoStats() []RepoStat {
 	meta := g.repoMeta()
-	out := make([]RepoStat, 0, len(meta))
+	var out []RepoStat
 	idx := make(map[string]int, len(meta))
 	for _, r := range g.Repos() {
 		idx[r] = len(out)
