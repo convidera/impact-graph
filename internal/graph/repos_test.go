@@ -127,3 +127,29 @@ func TestRepoStatsOfASnapshotIsEmpty(t *testing.T) {
 		t.Errorf("a snapshot has no links: %+v", l)
 	}
 }
+
+// Routes, tables and columns are never joined by their plain names: two repositories that have the same ones stay apart.
+func TestSameNamedContractsDoNotJoinRepositories(t *testing.T) {
+	repo := func(commit string) *Graph {
+		g := New()
+		g.Meta["commit"] = commit
+		g.AddNode(Node{ID: "table:users", Type: TypeTable, Label: "users"})
+		g.AddNode(Node{ID: "column:users.email", Type: TypeColumn, Label: "users.email"})
+		g.AddNode(Node{ID: "route:GET /api/users", Type: TypeRoute, Label: "GET /api/users"})
+		g.AddNode(Node{ID: "php:UserController::index", Type: TypeMethod, Label: "UserController::index", Path: "app/UserController.php", Line: 3})
+		g.AddEdge("php:UserController::index", "column:users.email", Reads, 0.9, "app/UserController.php:5")
+		g.AddEdge("php:UserController::index", "route:GET /api/users", Exposes, 0.9, "routes/api.php:7")
+		g.AddEdge("column:users.email", "table:users", MemberOf, 1, "")
+		return g
+	}
+	m := Merge(map[string]*Graph{"acme/shop": repo("1111111"), "acme/api": repo("2222222")})
+	if l := m.Links(); l.Shared != 0 || l.Through != 0 || l.Cross != 0 || len(l.Pairs) != 0 {
+		t.Fatalf("same-named tables, columns and routes must not join: %+v", l)
+	}
+	if m.Has("table:users") || m.Has("route:GET /api/users") || m.Has("column:users.email") {
+		t.Fatal("contracts must be prefixed with their repository, not shared")
+	}
+	if got := len(m.RepoStats()); got != 2 {
+		t.Fatalf("repositories = %d", got)
+	}
+}

@@ -279,12 +279,26 @@ connect: `cross-repository edges` counts the edges straight from one repository'
 nothing get a note; with several repositories, the pairs that do not connect are listed. `impact merge` prints the same
 block to stderr. `impact find` and `impact_find` say how many hits each repository contributed.
 
+Repositories also join without any configuration, through names that are unique across projects:
+
+- **environment variables**: a `.env.example` (or any `.env`, `*.env`), a compose `environment:`, a Kubernetes or Helm `env:` list
+  defines `ADAPTER_CLONE_TIMEOUT`; a PHP `env()` or `getenv()`, a Go `os.Getenv`/`os.LookupEnv`, a TypeScript
+  `process.env.X` or `import.meta.env.X` and a Python `os.environ`/`os.getenv` reads it;
+- **images**: a workflow pushes `ghcr.io/org/app-backend:latest` (`docker push`, `docker build -t`, the `images:` and `tags:`
+  of a docker action) and a manifest deploys `registry.example.com/org/app-backend:1.2`; the registry, the tag and the digest
+  are dropped, so both name `org/app-backend`.
+
+Generic names (`PORT`, `DB_*`, `APP_*`, ...) and images without an owner (`postgres`, `nginx`) never join; the lists are in
+`internal/extract/joins.go`. The edges of these two kinds have confidence 0.6, below the 0.7 that walks use by default, so a
+walk must pass `--min-confidence 0.6` to follow them. Event types, tool names and `[[mount]]` links join as they did. Routes,
+tables and columns never join by their plain names: two services that both have a `users` table stay apart.
+
 ## Limits
 
 - Resolution is by declared types, docblocks and conventions, not a type checker. An untyped receiver produces no edge (or a
   low-confidence guess for a distinctive method name), which is deliberate: a wrong edge costs more than a missing one.
 - Not extracted yet: OpenAPI documents (a client is joined to a route by URL, not by operation id), Go HTTP routes, validation
-  rules, environment variables, Helm templates (values files are read, see `[[mount]]`; a mount follows structs declared in the
+  rules, Helm templates (values files are read, see `[[mount]]`; a mount follows structs declared in the
   repository, a field of an imported type such as `corev1.ResourceRequirements` ends the pattern at that field), JSON payload keys as nodes, and knowledge nodes (requirements, tickets,
   decisions, documentation sections, features).
 - Client side, resolution is structural, not a type checker: a call through a value the extractor cannot follow (a Vuex
