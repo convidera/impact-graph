@@ -937,3 +937,111 @@ consume = ["b/one.go"]
 		t.Errorf("a vocabulary pinned to one file is trusted, got %v", c)
 	}
 }
+
+const openAPIFixture = `{
+  "openapi": "3.1.0",
+  "servers": [{"url": "https://app.test/api"}],
+  "paths": {
+    "/v1/entries": {
+      "post": {
+        "operationId": "entries.store",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/EntryRequest"}}}},
+        "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/EntryData"}}}}}
+      }
+    },
+    "/v1/entries/{id}": {"get": {"operationId": "entries.show", "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/EntryData"}}}}}}}
+  },
+  "components": {
+    "schemas": {
+      "EntryRequest": {"type": "object", "properties": {"note": {"type": "string"}, "owner": {"$ref": "#/components/schemas/OwnerData"}}},
+      "EntryData": {"type": "object", "properties": {"id": {"type": "integer"}}},
+      "OwnerData": {"type": "object", "properties": {"name": {"type": "string"}}}
+    }
+  }
+}
+`
+
+func TestOpenAPIDocumentJoinsRoutesTypesAndClients(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"integration/api.json": openAPIFixture,
+		"routes/api.php": `<?php
+use App\Http\Controllers\EntryController;
+use Illuminate\Support\Facades\Route;
+Route::prefix('v1')->group(function () {
+    Route::post('entries', [EntryController::class, 'store']);
+    Route::get('entries/{id}', [EntryController::class, 'show']);
+});`,
+		"app/Http/Controllers/EntryController.php": `<?php
+namespace App\Http\Controllers;
+class EntryController { public function store() {} public function show() {} }`,
+		"app/Data/EntryRequest.php": "<?php\nnamespace App\\Data;\nclass EntryRequest { public function __construct(public string $note) {} }\n",
+		"app/Data/EntryData.php":    "<?php\nnamespace App\\Data;\nclass EntryData {}\n",
+		"web/generated/schemas.ts":  "export interface EntryRequest { note: string }\nexport interface EntryData { id: number }\n",
+		"app/Client.php": `<?php
+namespace App;
+class Client {
+    public function store() { return $this->http->post('/api/v1/entries', []); }
+    public function show($id) { return $this->http->get('/api/v1/entries/' . $id); }
+    public function other() { return $this->http->get('/api/v1/unknown'); }
+}`,
+	})
+	g := index(t, root)
+	const doc = "integration/api.json"
+	store, show := "op:"+doc+"#POST /v1/entries", "op:"+doc+"#GET /v1/entries/{id}"
+	for _, id := range []string{store, show, "schema:" + doc + "#EntryRequest", "schema:" + doc + "#OwnerData"} {
+		if !g.Has(id) {
+			t.Fatalf("node %s missing", id)
+		}
+	}
+	if n := g.Nodes[store]; n.Path != doc || n.Line < 5 || n.Type != graph.TypeOp {
+		t.Errorf("an operation points at its line in the document: %+v", n)
+	}
+	checks := []struct{ src, dst, kind string }{
+		{store, "schema:" + doc + "#EntryRequest", graph.Uses},
+		{store, "schema:" + doc + "#EntryData", graph.Uses},
+		{"schema:" + doc + "#EntryRequest", "schema:" + doc + "#OwnerData", graph.Uses},
+		{store, "route:POST /api/v1/entries", graph.MapsTo},
+		{show, "route:GET /api/v1/entries/{id}", graph.MapsTo},
+		{"schema:" + doc + "#EntryRequest", `php:App\Data\EntryRequest`, graph.MapsTo},
+		{"schema:" + doc + "#EntryRequest", "ts:web/generated/schemas.ts#EntryRequest", graph.MapsTo},
+		{`php:App\Client::store`, store, graph.Mentions},
+		{`php:App\Client::show`, show, graph.Mentions},
+	}
+	for _, c := range checks {
+		if !hasEdge(g, c.src, c.dst, c.kind) {
+			t.Errorf("missing %s -[%s]-> %s", c.src, c.kind, c.dst)
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Src == `php:App\Client::other` && strings.HasPrefix(e.Dst, "op:") {
+			t.Errorf("a path the document does not declare joins nothing: %+v", e)
+		}
+	}
+	// a change to the Data class reaches the document that is generated from it
+	hits, _ := g.Walk(`php:App\Data\EntryRequest`, graph.Options{Mode: graph.ModeImpact, Dir: "down", MaxCost: 5, MinConf: 0.7})
+	if hits["schema:"+doc+"#EntryRequest"] == nil {
+		t.Errorf("the Data class reaches its schema: %v", len(hits))
+	}
+	if g.Nodes["schema:"+doc+"#EntryRequest"].Path != doc {
+		t.Errorf("the schema node carries the document path so review can list it")
+	}
+}
+
+func TestSameNamedTypesAreDisambiguatedByTheDocumentName(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod":                       "module example.com/m\n\ngo 1.22\n",
+		"integration/adapter-api.json": `{"openapi": "3.0.0", "paths": {}, "components": {"schemas": {"Request": {"type": "object"}}}}`,
+		"internal/adapterapi/types.go": "package adapterapi\n\ntype Request struct{ A string `json:\"a\"` }\n",
+		"internal/acp/types.go":        "package acp\n\ntype Request struct{ B string `json:\"b\"` }\n",
+	})
+	g := index(t, root)
+	s := "schema:integration/adapter-api.json#Request"
+	if !hasEdge(g, s, "go:example.com/m/internal/adapterapi.Request", graph.MapsTo) {
+		t.Errorf("the type in the package named after the document is the schema's")
+	}
+	if hasEdge(g, s, "go:example.com/m/internal/acp.Request", graph.MapsTo) {
+		t.Errorf("the other type of that name is not")
+	}
+}
