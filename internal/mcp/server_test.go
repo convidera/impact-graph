@@ -3,6 +3,9 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -182,5 +185,50 @@ func TestEveryToolSchemaHasARequiredArray(t *testing.T) {
 		if _, ok := schema["required"].([]any); !ok {
 			t.Errorf("%s: inputSchema.required must be an array, got %#v", tool["name"], schema["required"])
 		}
+	}
+}
+
+func TestReadOnlyServerReviewsACheckout(t *testing.T) {
+	dir := t.TempDir()
+	gitRun := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	gitRun("init", "-q")
+	if err := os.WriteFile(filepath.Join(dir, "a.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "impact.toml"), []byte("[[obligation]]\nname = \"regen\"\nwhen = [\"*.php\"]\nrequire = [\"api.json\"]\nfix = \"make generate\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("add", "-A")
+	gitRun("commit", "-q", "-m", "init")
+	if err := os.WriteFile(filepath.Join(dir, "a.php"), []byte("<?php\n// changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Source{ReadOnly: true, Checkouts: map[string]string{"acme/shop": dir}, Load: func() (*graph.Graph, error) { return testGraph(), nil }})
+	res := call(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"impact_review","arguments":{"base":"HEAD"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"impact_reindex","arguments":{}}}`)
+	if ins := res[0]["result"].(map[string]any)["instructions"].(string); !strings.Contains(ins, "impact_review") {
+		t.Errorf("instructions promise review when a working tree is known: %q", ins)
+	}
+	listed := map[string]bool{}
+	for _, tool := range res[1]["result"].(map[string]any)["tools"].([]any) {
+		listed[tool.(map[string]any)["name"].(string)] = true
+	}
+	if !listed["impact_review"] || listed["impact_reindex"] {
+		t.Errorf("review is offered and reindex is not: %v", listed)
+	}
+	if got := text(res[2]); !strings.Contains(got, "obligations this change has not met") || !strings.Contains(got, "fix: make generate") {
+		t.Errorf("the repository's own obligations are checked:\n%s", got)
+	}
+	if r := res[3]["result"].(map[string]any); r["isError"] != true {
+		t.Errorf("reindex stays unavailable: %v", r)
 	}
 }

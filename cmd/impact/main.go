@@ -30,6 +30,7 @@ const usage = `impact: ask a repository what a change influences.
   impact meet <a> <b>               the columns, fields and events two things share: how <a> reaches <b>
   impact hubs                       god nodes: the most connected symbols and contracts, how many communities they bridge, where a change floods (alias: god-nodes)
   impact review                     what the working tree or branch changes, and what it leaves out, and the [[obligation]]s it does not meet (--strict: fail on those)
+  impact query repos|nodes|node    the structured answers of a graph browser as JSON: repositories and how they connect, a node search, one node's neighbours
   impact suggest                    candidate [[obligation]] tables mined from git history, to confirm and paste into impact.toml
   impact merge <snapshot>...        combine the snapshots of several repositories into one graph (--out <file>)
   impact golden                     check the flows pinned in impact.toml
@@ -140,6 +141,8 @@ func main() {
 		err = cmdReview(args)
 	case "suggest":
 		err = cmdSuggest(args)
+	case "query":
+		err = cmdQuery(args)
 	case "golden":
 		err = cmdGolden(args)
 	case "check":

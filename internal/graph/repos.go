@@ -71,6 +71,12 @@ func (g *Graph) repoOf(id string) string {
 	return ""
 }
 
+// RepoOf is the repository of a node by id; "" for a shared value or an unknown node.
+func (g *Graph) RepoOf(id string) string { return g.repoOf(id) }
+
+// RepoInfo is the commit and build time recorded for one repository of a merged graph.
+func (g *Graph) RepoInfo(repo string) map[string]string { return g.repoMeta()[repo] }
+
 // RepoStat is what a merged graph holds of one repository.
 type RepoStat struct {
 	Repo   string

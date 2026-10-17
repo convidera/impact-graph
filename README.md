@@ -31,6 +31,7 @@ impact hubs                        # god nodes: the most connected symbols and c
 impact merge a.db b.db --out m.db  # several repositories' snapshots into one graph
 impact golden                      # the flows pinned in impact.toml
 impact check                       # drift checks: hand-kept lists against the contracts that declare them
+impact query repos                 # JSON for a graph browser: repositories and how they connect (also `nodes [text]`, `node <id>`)
 impact mcp                         # the queries as an MCP server on stdio
 ```
 
@@ -297,6 +298,15 @@ or `{}` (the property names of an object). Strings reached are the values:
 Node arguments accept an exact id, a repository path or any unique substring (`SpendGuard::assertAllowed`); an ambiguous one
 prints the candidates instead of guessing.
 
+## Structured queries for a graph browser
+
+`impact query repos`, `impact query nodes [text] [--repo r] [--type t] [--limit n]` and `impact query node <id>` print JSON: the
+repositories of a snapshot with commit, build time, node and edge counts per type and how they connect (`shared_values`,
+`direct_edges`), a search over node labels and ids ranked by degree, and one node with up to 60 neighbours per direction
+(kind, confidence, provenance, `file:line`). The types are in `internal/query` and are the contract: a service that shows the
+graph reads this output (with `impact impact --json` and `impact trace --json` for walks) instead of the snapshot's tables,
+which are an implementation detail and change with the schema version.
+
 ## MCP server
 
 `impact mcp` serves `impact_find`, `impact_impact`, `impact_trace`, `impact_meet`, `impact_review`, `impact_reindex`,
@@ -317,7 +327,11 @@ impact communities --repo acme/api
 ```
 
 The MCP tools `impact_find`, `impact_overview`, `impact_god_nodes` and `impact_community` take the same `repository`
-argument. On a snapshot of one repository the argument is accepted and ignored. Shared values are left out of the lists and
+argument. `impact mcp --readonly --db merged.db --checkout owner/name=/path/to/checkout` (repeatable) also offers
+`impact_review` for those repositories: it diffs the working tree of the repository named in `repository` against its base,
+reads that repository's `impact.toml` for obligations, and matches the changed files to the nodes of that repository only,
+while the graph stays the snapshot (the code as it was indexed). Items found in another repository are labelled with it.
+`impact_reindex` is never offered on a merged snapshot. On a snapshot of one repository the argument is accepted and ignored. Shared values are left out of the lists and
 counted apart.
 
 `impact overview` on a merge starts with one line per repository (nodes, edges, commit) and then says how the repositories
