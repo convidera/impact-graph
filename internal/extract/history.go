@@ -12,8 +12,8 @@ import (
 
 // runHistory mines git for files that change together. It needs no language support, so it works on any repository and
 // finds exactly the things a checklist asks for and an agent forgets: the changelog entry, the generated client, the
-// test plan next to the screen. Two files become a `co_changed` edge when, in a commit that touched A, B was touched
-// too often enough (support and ratio); the edge confidence is that ratio.
+// test plan next to the screen. Two files become a `co_changed` edge when they were touched together often enough
+// (support and ratio); the edge confidence is the share of the commits that touched either file in which both changed.
 func runHistory(ctx *Ctx) {
 	h := ctx.Cfg.Index.History
 	commits, maxFiles, minSupport := 1500, 40, 3
@@ -66,9 +66,10 @@ func runHistory(ctx *Ctx) {
 		if n < minSupport {
 			continue
 		}
-		// confidence: how often the less frequently changed file comes with the other
+		// confidence: the share of the commits that touched either file in which both changed. Dividing by the rarer
+		// file's count would link a rarely edited document to every busy file it happened to ride along with.
 		denom := touch[p[0]]
-		if touch[p[1]] < denom {
+		if touch[p[1]] > denom {
 			denom = touch[p[1]]
 		}
 		conf := float64(n) / float64(denom)
