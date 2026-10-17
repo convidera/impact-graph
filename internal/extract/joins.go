@@ -71,7 +71,7 @@ func imageRepository(ref string) string {
 	if i := strings.Index(parts[last], ":"); i >= 0 {
 		parts[last] = parts[last][:i]
 	}
-	if len(parts) < 2 || parts[0] == "" || parts[last] == "" || fileExtensions[path.Ext(parts[last])] {
+	if len(parts) < 2 || parts[0] == "" || parts[last] == "" || fileExtensions[strings.ToLower(path.Ext(parts[last]))] {
 		return ""
 	}
 	return strings.Join(parts, "/")

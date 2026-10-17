@@ -37,6 +37,10 @@ func TestImageRepositoryNormalisation(t *testing.T) {
 		"ghcr.io/org/app:${{ github.sha }}":                  "",
 		"ghcr.io/org/${IMAGE}:latest":                        "",
 		"assets/logo.png":                                    "",
+		"assets/logo.PNG":                                    "",
+		"config/values.Yaml":                                 "",
+		"assets/data.JSON":                                   "",
+		"assets/Icon.Svg":                                    "",
 		"":                                                   "",
 		"/app":                                               "",
 	} {
