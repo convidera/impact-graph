@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 
@@ -23,6 +24,10 @@ type Source struct {
 	Reindex func() (string, error)
 	// Obligations are the declared companion-change rules impact_review checks (impact.toml); may be empty.
 	Obligations []config.Obligation
+	// Checkouts maps a repository (owner/name) of a read-only merged snapshot to its working tree. With it impact_review is
+	// offered: it diffs that working tree against the base and reads the repository's impact.toml for obligations, while the
+	// graph stays the snapshot (the code as it was when the repository was indexed). impact_reindex is never offered.
+	Checkouts map[string]string
 	// ReadOnly serves a stored snapshot that has no working tree behind it (for example the merged snapshot of several
 	// repositories): impact_reindex and impact_review are neither listed nor callable.
 	ReadOnly bool
@@ -95,6 +100,11 @@ func (s *Server) handle(req request) (any, *rpcError) {
 				"working tree). Node ids of a repository are prefixed with <owner>/<name>//; values shared across repositories, such as " +
 				"event types, are one node. Before planning a change, call impact_impact on the symbols, columns, routes or events it " +
 				"touches to see what else depends on them. Use impact_overview for the map of the code base."
+			if len(s.src.Checkouts) > 0 {
+				instructions += " Before you finish, call impact_review with the repository you changed: it compares that working tree " +
+					"with its base and lists the companion changes the repository's rules demand (obligations) and the tests, documents, " +
+					"contracts and files the change is related to but does not contain."
+			}
 		}
 		return map[string]any{
 			"protocolVersion": "2025-06-18",
@@ -138,9 +148,11 @@ func (s *Server) tools() []map[string]any {
 	}
 	kept := all[:0:0]
 	for _, t := range all {
-		if name := t["name"]; name != "impact_reindex" && name != "impact_review" {
-			kept = append(kept, t)
+		name := t["name"]
+		if name == "impact_reindex" || (name == "impact_review" && len(s.src.Checkouts) == 0) {
+			continue
 		}
+		kept = append(kept, t)
 	}
 	return kept
 }
@@ -188,7 +200,10 @@ func allTools() []map[string]any {
 		{
 			"name":        "impact_review",
 			"description": "Review the working tree against a base commit: lists the tests, documents, contracts, callers and historically co-changed files that the change is related to but does not contain. Call it before finishing: it also lists the obligations (companion changes the repository's own rules demand, such as a regenerated client or a changelog entry) that the change has not met.",
-			"inputSchema": obj(map[string]any{"base": str("base", "commit to compare with; default is the branch's upstream or merge base")}),
+			"inputSchema": obj(map[string]any{
+				"base":       str("base", "commit to compare with; default is the branch's upstream or merge base"),
+				"repository": str("repository", "the repository whose working tree to review, as owner/name; needed when the graph holds several"),
+			}),
 		},
 		{
 			"name": "impact_overview",
@@ -244,7 +259,7 @@ func (s *Server) graph() (*graph.Graph, error) {
 }
 
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
-	if s.src.ReadOnly && (name == "impact_reindex" || name == "impact_review") {
+	if s.src.ReadOnly && (name == "impact_reindex" || (name == "impact_review" && len(s.src.Checkouts) == 0)) {
 		return "", fmt.Errorf("%s needs a working tree and is not available on this snapshot", name)
 	}
 	if name == "impact_reindex" {
@@ -410,6 +425,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		return report.GodNodes(g, g.GodNodes(a.Top, graph.GodOptions{Types: types, Repo: r})), nil
 	case "impact_review":
+		if s.src.ReadOnly {
+			return s.reviewCheckout(g, a.Repository, a.Base)
+		}
 		base := a.Base
 		if base == "" {
 			base = review.DefaultBase(s.src.Root)
@@ -423,4 +441,42 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return review.Text(review.Run(g, base, changes, o), 12), nil
 	}
 	return "", fmt.Errorf("unknown tool %s", name)
+}
+
+// reviewCheckout reviews the working tree of one repository of a merged snapshot.
+func (s *Server) reviewCheckout(g *graph.Graph, repository, base string) (string, error) {
+	repo, err := g.ResolveRepo(repository)
+	if err != nil {
+		return "", err
+	}
+	if repo == "" {
+		if len(s.src.Checkouts) != 1 {
+			names := make([]string, 0, len(s.src.Checkouts))
+			for n := range s.src.Checkouts {
+				names = append(names, n)
+			}
+			sort.Strings(names)
+			return "", fmt.Errorf("name the repository to review: %s", strings.Join(names, ", "))
+		}
+		for n := range s.src.Checkouts {
+			repo = n
+		}
+	}
+	dir := s.src.Checkouts[repo]
+	if dir == "" {
+		return "", fmt.Errorf("%s has no working tree in this session", repo)
+	}
+	if base == "" {
+		base = review.DefaultBase(dir)
+	}
+	changes, err := review.Changes(dir, base)
+	if err != nil {
+		return "", err
+	}
+	o := review.DefaultOptions()
+	o.Repo = repo
+	if cfg, err := config.Load(dir, ""); err == nil {
+		o.Obligations = cfg.Obligation
+	}
+	return review.Text(review.Run(g, base, changes, o), 12), nil
 }
