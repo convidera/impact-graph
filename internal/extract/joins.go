@@ -10,9 +10,14 @@ import (
 // project and say nothing about a link between two of them, and postgres or nginx name a public image, not a service that
 // another repository deploys. So the lists below leave those out, and an image needs an owner ("org/app").
 
-// genericEnvPrefixes are the prefixes of variables that every framework or service reads.
+// genericEnvPrefixes are the prefixes of variables that every framework or tool reads. The first group is what Laravel and
+// its packages list in their default configuration, so every Laravel repository has them and none of them says that two
+// repositories are related; the second is the same for the runtimes, container tools and hosting services around an app.
 var genericEnvPrefixes = []string{
 	"APP_", "DB_", "REDIS_", "LOG_", "CACHE_", "SESSION_", "MAIL_", "QUEUE_", "AWS_", "BROADCAST_", "FILESYSTEM_", "VITE_", "MIX_",
+	"MEMCACHED_", "SQS_", "POSTMARK_", "DYNAMODB_", "PAPERTRAIL_", "BCRYPT_", "RESEND_", "SLACK_", "MAILGUN_", "SES_", "PUSHER_",
+	"REVERB_", "OCTANE_", "TELESCOPE_", "SANCTUM_", "XDEBUG_",
+	"PHP_", "NPM_", "YARN_", "DOCKER_", "COMPOSE_", "POSTGRES_", "MYSQL_", "MARIADB_", "GITHUB_", "KUBERNETES_",
 }
 
 // genericEnvNames are variables that are common to all projects, whatever their prefix.

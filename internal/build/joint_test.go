@@ -38,29 +38,48 @@ func reachedRepos(hits map[string]*graph.Hit) map[string]bool {
 	return out
 }
 
-func laravelShop() map[string]string {
+// laravelShop is a Laravel-like repository that reads one variable in its config and in a method, and lists it in
+// .env.example.
+func laravelShop(name string) map[string]string {
 	return map[string]string{
-		".env.example":     "MEMCACHED_HOST=127.0.0.1\n",
-		"config/cache.php": "<?php\nreturn ['memcached' => ['host' => env('MEMCACHED_HOST', '127.0.0.1')]];\n",
-		"app/Cache.php":    "<?php\nclass Cache\n{\n    public function host()\n    {\n        return getenv('MEMCACHED_HOST');\n    }\n}\n",
+		".env.example":     name + "=127.0.0.1\n",
+		"config/cache.php": "<?php\nreturn ['memcached' => ['host' => env('" + name + "', '127.0.0.1')]];\n",
+		"app/Cache.php":    "<?php\nclass Cache\n{\n    public function host()\n    {\n        return getenv('" + name + "');\n    }\n}\n",
 	}
 }
 
-func TestBothReadingAnUnsetNameInEnvExampleAreNotConnected(t *testing.T) {
-	g := indexed(t, map[string]map[string]string{"acme/shop": laravelShop(), "acme/api": laravelShop()})
+// Generic names (MEMCACHED_HOST) never join, and a name that is not generic but read by two repositories and set by neither
+// is split into one copy per repository.
+func TestBothReadingAnUnsetNameAreNotConnected(t *testing.T) {
+	g := indexed(t, map[string]map[string]string{"acme/shop": laravelShop("MEMCACHED_HOST"), "acme/api": laravelShop("MEMCACHED_HOST")})
 	noLinks(t, g)
-	if g.Has("env:MEMCACHED_HOST") {
-		t.Fatal("the name is read by two repositories and set by neither: it must not be one shared node")
+	if g.Has("env:MEMCACHED_HOST") || len(sharedNodes(g)) != 0 {
+		t.Fatal("a generic name of every Laravel app is not a joined node")
+	}
+	g = indexed(t, map[string]map[string]string{"acme/shop": laravelShop("ADAPTER_CACHE_HOST"), "acme/api": laravelShop("ADAPTER_CACHE_HOST")})
+	noLinks(t, g)
+	if g.Has("env:ADAPTER_CACHE_HOST") {
+		t.Fatal("two repositories that only read the name must not share its node")
 	}
 	o := graph.DefaultOptions()
 	o.Dir = "up"
 	hits, _ := g.Walk("acme/shop//php:Cache::host", o)
-	if hits["acme/shop//env:MEMCACHED_HOST"] == nil {
+	if hits["acme/shop//env:ADAPTER_CACHE_HOST"] == nil {
 		t.Fatal("the read must still lead to the name of its own repository")
 	}
 	if repos := reachedRepos(hits); repos["acme/api"] {
 		t.Fatalf("the walk of acme/shop reached acme/api: %v", repos)
 	}
+}
+
+func sharedNodes(g *graph.Graph) []string {
+	var out []string
+	for id, n := range g.Nodes {
+		if n.Type == graph.TypeValue && n.Repo == "" {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func TestReadInCodeAndSetInHelmIsOneConnection(t *testing.T) {

@@ -8,6 +8,12 @@ func TestJoinableEnvNames(t *testing.T) {
 		"APP_NAME": false, "DB_HOST": false, "REDIS_URL": false, "LOG_CHANNEL": false, "VITE_API_BASE": false, "MIX_URL": false,
 		"AWS_REGION": false, "MAIL_FROM": false, "QUEUE_CONNECTION": false, "BROADCAST_DRIVER": false,
 		"PORT": false, "HOST": false, "NODE_ENV": false, "DEBUG": false, "GOPATH": false, "PATH": false,
+		"MEMCACHED_HOST": false, "SQS_QUEUE": false, "POSTMARK_TOKEN": false, "DYNAMODB_ENDPOINT": false, "PAPERTRAIL_URL": false,
+		"BCRYPT_ROUNDS": false, "RESEND_KEY": false, "SLACK_WEBHOOK_URL": false, "MAILGUN_DOMAIN": false, "SES_REGION": false,
+		"PUSHER_APP_KEY": false, "REVERB_PORT": false, "OCTANE_HTTPS": false, "TELESCOPE_ENABLED": false, "SANCTUM_STATEFUL_DOMAINS": false,
+		"XDEBUG_MODE": false, "PHP_INI_SCAN_DIR": false, "NPM_CONFIG_CACHE": false, "YARN_CACHE_FOLDER": false, "DOCKER_HOST": false,
+		"COMPOSE_PROJECT_NAME": false, "POSTGRES_DB": false, "MYSQL_USER": false, "MARIADB_ROOT_PASSWORD": false, "GITHUB_TOKEN": false,
+		"KUBERNETES_SERVICE_HOST": false, "SESSION_DRIVER": false, "SESAME_KEY": true, "SQSX_QUEUE": true, "MEMCACHE_HOST": true,
 		"TOKEN": false, "A_B": false, "ABC_": true, "ADAPTER_timeout": false, "ADAPTER-TIMEOUT": false, "": false,
 	} {
 		if got := joinableEnv(name); got != want {
