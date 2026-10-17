@@ -11,7 +11,7 @@ columns, routes, MCP tools, event types) and answers four questions:
 | What does a change here affect, and what can affect this? | `impact impact <node> [-d up] [--flow]` |
 | How does a value get from A to B? | `impact trace <a> <b> [--via <node>] [--paths N]` |
 | What do two things share (the columns, fields and events both touch)? | `impact meet <a> <b>` |
-| What did my change leave out (tests, docs, callers, files that usually change with it)? | `impact review` |
+| What did my change leave out (tests, docs, callers, files that usually change with it, the companion changes the repository's rules demand)? | `impact review` |
 
 It is a standalone Go module (`github.com/convidera/impact-graph`) with no dependency on the platform that uses it (convidera/managed-coding-service). The only repository-specific input is an
 optional `impact.toml` next to the code it indexes.
@@ -22,7 +22,9 @@ impact find SpendGuard::assert     # locate nodes by id or name
 impact impact column:spend_entries.amount_micros --flow -d up --only code
 impact trace splitClaudeModelCost SpendGuard::assertAllowed --via column:spend_entries.amount_micros
 impact meet mcp:create-timesheet-entry-tool mcp:analyse-monthly-timesheet-tool   # in a Laravel repo
-impact review                      # the working tree against the branch's upstream; starts with the changed areas
+impact review                      # the working tree against the branch's upstream; starts with unmet obligations and the changed areas
+impact review --strict             # the same, and exit 1 when a declared obligation is not met (for CI and hooks)
+impact suggest                     # candidate [[obligation]] tables mined from git history
 impact overview                    # the repo map: repository, commit, counts, top communities, god nodes
 impact communities --top 10        # the subsystems (Leiden communities); --id N shows one
 impact hubs                        # god nodes: the most connected symbols and contracts (alias god-nodes)
@@ -210,6 +212,28 @@ from = "backend.splitClaudeModelCost"
 via = ["column:spend_entries.amount_micros"]
 to = "SpendGuard::assertAllowed"
 ```
+
+### Obligations
+
+`impact review` lists what a change relates to; an obligation is a rule a repository states about *companion* changes: "when
+these files change, one of those must change too". The rules that live as prose in an `AGENTS.md` or a pull request template
+(an API change regenerates the client, a UI change updates its test plan) are declared once, and `review` (CLI and the
+`impact_review` MCP tool) reports the ones a change triggers and does not satisfy, with the files that triggered them, the
+reason and the command that fixes it. `impact review --strict` exits 1 for CI.
+
+```toml
+[[obligation]]
+name = "API shape: regenerate the OpenAPI document"
+when = ["backend/app/Domain/*/Data/**", "backend/routes/**"]   # a changed file matches one of these ...
+unless = ["**/*Test.php"]                                      # ... and none of these (optional)
+require = ["integration/api.json"]                             # then some changed file must match one of these
+why = "the document and the generated client derive from the Data classes and routes"
+fix = "devops agents generate"                                 # optional
+```
+
+`impact suggest` mines the git history for candidates (`N of M commits that touched app/Data/** also touched
+integration/api.json`) and prints them as `[[obligation]]` tables to confirm. A companion that changes in most commits is not
+proposed, and neither is a generated file as a trigger. It proposes; a person decides.
 
 ### Generated code
 
