@@ -312,7 +312,7 @@ func codeReaders() []codeReader {
 		{
 			lang:    ts.NewLanguage(tsgo.Language()),
 			exts:    []string{".go"},
-			needles: []string{"Getenv(", "LookupEnv("},
+			needles: []string{"Getenv(", "getenv(", "LookupEnv(", "lookupEnv(", "lookupenv("},
 			name:    goEnvName,
 			decl:    map[string]bool{"function_declaration": true, "method_declaration": true},
 		},
@@ -448,10 +448,7 @@ func goEnvName(s *source, n *ts.Node) string {
 		return ""
 	}
 	fn := field(n, "function")
-	if fn == nil || fn.Kind() != "selector_expression" {
-		return ""
-	}
-	if t := s.text(fn); t != "os.Getenv" && t != "os.LookupEnv" {
+	if fn == nil || !goEnvLookup(s, fn) {
 		return ""
 	}
 	args := kids(field(n, "arguments"))
@@ -459,6 +456,23 @@ func goEnvName(s *source, n *ts.Node) string {
 		return ""
 	}
 	return stringLiteral(s, args[0])
+}
+
+// goEnvLookup says whether a call's function reads the environment: os.Getenv and os.LookupEnv, but also a function
+// that code takes as a parameter or field so that tests can inject the environment (`getenv func(string) string`,
+// `env.LookupEnv`). Such a function is recognised by its name; the name it is called with must still be a joinable
+// variable name, which keeps a method that merely shares the name from adding an edge.
+func goEnvLookup(s *source, fn *ts.Node) bool {
+	var name string
+	switch fn.Kind() {
+	case "identifier":
+		name = s.text(fn)
+	case "selector_expression":
+		if f := field(fn, "field"); f != nil {
+			name = s.text(f)
+		}
+	}
+	return strings.EqualFold(name, "getenv") || strings.EqualFold(name, "lookupenv")
 }
 
 // tsEnvName is the name of `process.env.NAME` or `import.meta.env.NAME`.
