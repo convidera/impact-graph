@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Thin launcher for the devops CLI (https://github.com/convidera/devops-cli).
+# Runs a new-enough `devops` (from PATH or the install dir); humans get it downloaded if missing.
+# `./devops install` installs or upgrades it explicitly.
+set -u
+
+MIN_VERSION="v0.2.0"
+INSTALL_DIR="${DEVOPS_INSTALL_DIR:-$HOME/.local/bin}"
+
+is_agent() {
+    local agent="${DEVOPS_AGENT:-}"
+    [ -z "$agent" ] && [ "${CLAUDECODE:-}" = "1" ] && agent=1
+    [ -n "$agent" ] && [ "$agent" != "0" ]
+}
+
+# Portable "$1 >= $2" for vMAJOR.MINOR.PATCH (sort -V is a GNU extension, missing on macOS).
+version_ge() {
+    local a b i
+    IFS=. read -r -a a <<< "${1#v}"
+    IFS=. read -r -a b <<< "${2#v}"
+    for i in 0 1 2; do
+        local x="${a[i]:-0}" y="${b[i]:-0}"
+        x="${x%%[!0-9]*}"; y="${y%%[!0-9]*}"
+        [ "${x:-0}" -gt "${y:-0}" ] && return 0
+        [ "${x:-0}" -lt "${y:-0}" ] && return 1
+    done
+    return 0
+}
+
+# A local "dev" build is always accepted.
+version_ok() {
+    local v
+    v="$("$1" version 2>/dev/null)" || return 1
+    [ "$v" = "dev" ] && return 0
+    version_ge "$v" "$MIN_VERSION"
+}
+
+find_cli() {
+    local bin
+    while IFS= read -r bin; do
+        [ "$bin" -ef "$0" ] && continue
+        version_ok "$bin" && { echo "$bin"; return 0; }
+    done < <(type -aP devops)
+    [ -x "$INSTALL_DIR/devops" ] && version_ok "$INSTALL_DIR/devops" && { echo "$INSTALL_DIR/devops"; return 0; }
+    return 1
+}
+
+install_cli() {
+    local os arch tmp
+    case "$(uname -s)" in Linux) os=linux ;; Darwin) os=darwin ;; *) echo "devops: unsupported OS $(uname -s)" >&2; return 1 ;; esac
+    case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "devops: unsupported architecture $(uname -m)" >&2; return 1 ;; esac
+    mkdir -p "$INSTALL_DIR"
+    tmp="$(mktemp "$INSTALL_DIR/.devops-install-XXXXXX")" || return 1
+    echo "devops: installing $MIN_VERSION to $INSTALL_DIR/devops" >&2
+    if ! curl -fsSL "https://github.com/convidera/devops-cli/releases/download/$MIN_VERSION/devops-$os-$arch" -o "$tmp"; then
+        rm -f "$tmp"; echo "devops: download failed" >&2; return 1
+    fi
+    chmod +x "$tmp" && mv "$tmp" "$INSTALL_DIR/devops"
+}
+
+if [ "${1:-}" = "install" ] && ! is_agent; then
+    install_cli
+    exit $?
+fi
+
+if ! cli="$(find_cli)"; then
+    if is_agent; then
+        echo "devops: CLI >= $MIN_VERSION not installed; agents must use \"devops agents <command>\". Stop and report that the runner image lacks the devops CLI." >&2
+        exit 127
+    fi
+    install_cli || exit 127
+    cli="$INSTALL_DIR/devops"
+fi
+exec "$cli" "$@"

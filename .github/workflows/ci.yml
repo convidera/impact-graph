@@ -62,3 +62,8 @@ jobs:
           "${RUNNER_TEMP}/impact" version | grep -q '^impact ci '
           "${RUNNER_TEMP}/impact" index --root . -q
           "${RUNNER_TEMP}/impact" stats --root .
+
+  # Keeps the repository agent-ready: `devops agents doctor` checks .devops/agents.yaml and AGENTS.md.
+  agent-ready:
+    name: Agent ready
+    uses: convidera/devops-cli/.github/workflows/agent-ready.yml@v0.2.0
