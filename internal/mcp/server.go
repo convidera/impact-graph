@@ -124,6 +124,9 @@ func str(name, desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
 }
 
+// repoArg is the optional repository argument of the tools that can be restricted to one repository of a merged graph.
+var repoArg = str("repository", "only this repository, as owner/name; a unique name without the owner also works")
+
 // tools is the tool list of this server: the read-only variant leaves out what needs a working tree.
 func (s *Server) tools() []map[string]any {
 	all := allTools()
@@ -150,9 +153,10 @@ func allTools() []map[string]any {
 	}
 	return []map[string]any{
 		{
-			"name":        "impact_find",
-			"description": "Find graph nodes (classes, methods, columns, routes, MCP tools, events) whose id or name contains the text. Use it to get an exact node id for the other tools.",
-			"inputSchema": obj(map[string]any{"text": str("text", "part of a name or id"), "limit": map[string]any{"type": "integer"}}, "text"),
+			"name": "impact_find",
+			"description": "Find graph nodes (classes, methods, columns, routes, MCP tools, events) whose id or name contains the text. Use it to get an exact node id for the other tools. " +
+				"On a merged graph of several repositories, pass repository to list the hits of one of them.",
+			"inputSchema": obj(map[string]any{"text": str("text", "part of a name or id"), "limit": map[string]any{"type": "integer"}, "repository": repoArg}, "text"),
 		},
 		{
 			"name": "impact_impact",
@@ -186,28 +190,33 @@ func allTools() []map[string]any {
 		{
 			"name": "impact_overview",
 			"description": "The map of the repository: which snapshot this is, how many nodes and contracts it has, its largest communities (subsystems found by clustering) " +
-				"with their most connected members, and its god nodes. Call it first when you start on a repository you do not know, before you choose the symbols to pass to impact_impact.",
+				"with their most connected members, and its god nodes. Call it first when you start on a repository you do not know, before you choose the symbols to pass to impact_impact. " +
+				"On a merged graph of several repositories, repository restricts the map to one of them.",
 			"inputSchema": obj(map[string]any{
 				"communities": map[string]any{"type": "integer", "description": "how many communities to list, default 8"},
 				"gods":        map[string]any{"type": "integer", "description": "how many god nodes to list, default 8"},
+				"repository":  repoArg,
 			}),
 		},
 		{
 			"name": "impact_community",
 			"description": "The members of one community: a subsystem that clustering found from the calls, reads and writes between symbols. Its label, directory, most connected members " +
-				"and members by type. Use it to see what belongs to the subsystem a changed symbol is in, or to find the parts that a change there would touch. Take the id from impact_overview or impact_impact.",
+				"and members by type. Use it to see what belongs to the subsystem a changed symbol is in, or to find the parts that a change there would touch. Take the id from impact_overview or impact_impact. " +
+				"On a merged graph, repository lists only the members of that repository.",
 			"inputSchema": obj(map[string]any{
-				"id":    map[string]any{"type": "integer", "description": "community id, as in c<id>"},
-				"limit": map[string]any{"type": "integer", "description": "ids to list per member type, default 20"},
+				"id":         map[string]any{"type": "integer", "description": "community id, as in c<id>"},
+				"limit":      map[string]any{"type": "integer", "description": "ids to list per member type, default 20"},
+				"repository": repoArg,
 			}, "id"),
 		},
 		{
 			"name": "impact_god_nodes",
 			"description": "The most connected symbols and contracts, with how many distinct neighbours they have and how many communities those span. Use it to see where a change is likely to flood " +
-				"before you change a widely used symbol, a table or a route.",
+				"before you change a widely used symbol, a table or a route. On a merged graph, repository restricts the list to one repository.",
 			"inputSchema": obj(map[string]any{
-				"top":  map[string]any{"type": "integer", "description": "how many nodes to list, default 15"},
-				"type": str("type", "only nodes of this type, for example class, method, table, route"),
+				"top":        map[string]any{"type": "integer", "description": "how many nodes to list, default 15"},
+				"type":       str("type", "only nodes of this type, for example class, method, table, route"),
+				"repository": repoArg,
 			}),
 		},
 		{
@@ -264,6 +273,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		ID          int      `json:"id"`
 		Top         int      `json:"top"`
 		Type        string   `json:"type"`
+		Repository  string   `json:"repository"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
@@ -285,12 +295,17 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		return "", fmt.Errorf("%s", b.String())
 	}
+	repo := func() (string, error) { return g.ResolveRepo(a.Repository) }
 	switch name {
 	case "impact_find":
 		if a.Limit == 0 {
 			a.Limit = 25
 		}
-		out := report.Find(g, a.Text, a.Limit)
+		r, err := repo()
+		if err != nil {
+			return "", err
+		}
+		out := report.FindIn(g, r, a.Text, a.Limit)
 		if out == "" {
 			return "no node matches " + a.Text, nil
 		}
@@ -364,12 +379,20 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if a.Gods == 0 {
 			a.Gods = 8
 		}
-		return report.Overview(g, a.Communities, a.Gods), nil
+		r, err := repo()
+		if err != nil {
+			return "", err
+		}
+		return report.OverviewIn(g, r, a.Communities, a.Gods), nil
 	case "impact_community":
 		if a.Limit == 0 {
 			a.Limit = 20
 		}
-		return report.Community(g, a.ID, a.Limit), nil
+		r, err := repo()
+		if err != nil {
+			return "", err
+		}
+		return report.CommunityIn(g, r, a.ID, a.Limit), nil
 	case "impact_god_nodes":
 		if a.Top == 0 {
 			a.Top = 15
@@ -378,7 +401,11 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if a.Type != "" {
 			types = []string{a.Type}
 		}
-		return report.GodNodes(g, g.GodNodes(a.Top, graph.GodOptions{Types: types})), nil
+		r, err := repo()
+		if err != nil {
+			return "", err
+		}
+		return report.GodNodes(g, g.GodNodes(a.Top, graph.GodOptions{Types: types, Repo: r})), nil
 	case "impact_review":
 		base := a.Base
 		if base == "" {

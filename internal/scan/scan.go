@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,6 +18,13 @@ type File struct {
 	Path string // slash-separated, relative to the root
 	Kind string // code, test, doc or generated
 	Ext  string
+}
+
+// IsDotenv says whether a file is in the dotenv format (.env, .env.example, *.env, *.env.example): its keys name the
+// environment variables of a service. Only the names are read; the values stay out of the graph.
+func IsDotenv(rel string) bool {
+	base := path.Base(rel)
+	return base == ".env" || strings.HasSuffix(base, ".env") || strings.HasSuffix(base, ".env.example")
 }
 
 var indexed = map[string]bool{
@@ -56,7 +64,7 @@ func List(root string, cfg *config.Config) ([]File, error) {
 	var out []File
 	for _, rel := range rels {
 		ext := strings.ToLower(filepath.Ext(rel))
-		if !indexed[ext] || cfg.Excluded(rel) {
+		if (!indexed[ext] && !IsDotenv(rel)) || cfg.Excluded(rel) {
 			continue
 		}
 		st, err := os.Stat(filepath.Join(root, rel))

@@ -27,7 +27,7 @@ func Merge(parts map[string]*Graph) *Graph {
 		for id, n := range g.Nodes {
 			node := *n
 			node.Props = withoutCommunity(n.Props)
-			node.ID = repo + "//" + id
+			node.ID = repoID(repo, id)
 			node.Repo = repo
 			if n.Type == TypeValue {
 				node.ID, node.Repo = id, ""
@@ -43,6 +43,7 @@ func Merge(parts map[string]*Graph) *Graph {
 			}
 		}
 	}
+	splitSharedNames(out)
 	LinkConfig(out)
 	repoJSON, _ := json.Marshal(repoMeta)
 	out.Meta["repos"] = string(repoJSON)
@@ -51,6 +52,9 @@ func Merge(parts map[string]*Graph) *Graph {
 	out.Index()
 	return out
 }
+
+// repoID is the id of a node of one repository in a merged graph.
+func repoID(repo, id string) string { return repo + "//" + id }
 
 // withoutCommunity copies props minus the community label, which is only meaningful inside one snapshot.
 func withoutCommunity(props map[string]string) map[string]string {

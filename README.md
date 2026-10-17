@@ -256,12 +256,54 @@ prints the candidates instead of guessing.
 `impact_overview`, `impact_community` and `impact_god_nodes` over newline-delimited JSON-RPC on stdio. An agent calls `impact_impact` while it plans a change and `impact_review` before it
 finishes. See [docs/design.md](docs/design.md) for how this becomes a platform feature.
 
+## Several repositories
+
+`impact merge a.db b.db --out m.db` combines the snapshots of several repositories into one graph. Each node keeps its
+repository (ids become `owner/name//<id>`), and the repositories meet only where they share a value: an event type, a tool
+name, a `[[mount]]` that matches a values key. A query that should stay in one repository says so:
+
+```sh
+impact overview --repo acme/api           # the map of one repository of the merge
+impact find Order --repo api              # a unique name without the owner also works
+impact hubs --repo acme/api
+impact communities --repo acme/api
+```
+
+The MCP tools `impact_find`, `impact_overview`, `impact_god_nodes` and `impact_community` take the same `repository`
+argument. On a snapshot of one repository the argument is accepted and ignored. Shared values are left out of the lists and
+counted apart.
+
+`impact overview` on a merge starts with one line per repository (nodes, edges, commit) and then says how the repositories
+connect: `cross-repository edges` counts the edges straight from one repository's own nodes to another's, and
+`connected through shared values` the shared values that reach two or more of them. Two repositories that connect to
+nothing get a note; with several repositories, the pairs that do not connect are listed. `impact merge` prints the same
+block to stderr. `impact find` and `impact_find` say how many hits each repository contributed.
+
+Repositories also join without any configuration, through names that are unique across projects:
+
+- **environment variables**: a `.env.example` (or any `.env`, `*.env`), a compose `environment:`, a Kubernetes or Helm `env:` list
+  defines `ADAPTER_CLONE_TIMEOUT`; a PHP `env()` or `getenv()`, a Go `os.Getenv`/`os.LookupEnv`, a TypeScript
+  `process.env.X` or `import.meta.env.X` and a Python `os.environ`/`os.getenv` reads it;
+- **images**: a workflow pushes `ghcr.io/org/app-backend:latest` (`docker push`, `docker build -t`, the `images:` and `tags:`
+  of a docker action) and a manifest deploys `registry.example.com/org/app-backend:1.2`; the registry, the tag and the digest
+  are dropped, so both name `org/app-backend`.
+
+A name joins repositories only when one side produces it and another side consumes it. Producers are the deployment
+definitions (compose `environment:`, Kubernetes and Helm `env:` lists, workflow pushes); consumers are the code that reads a
+variable, a dotenv file that expects it, and the manifests that deploy an image. Two repositories that only read the same
+variable, or only deploy the same image, are not connected: each keeps its own copy of the name.
+
+Generic names (`PORT`, `DB_*`, `APP_*`, ...) and images without an owner (`postgres`, `nginx`) never join; the lists are in
+`internal/extract/joins.go`. The edges of these two kinds have confidence 0.7, the default walk threshold, so walks follow
+them without a flag. Event types, tool names and `[[mount]]` links join as they did. Routes,
+tables and columns never join by their plain names: two services that both have a `users` table stay apart.
+
 ## Limits
 
 - Resolution is by declared types, docblocks and conventions, not a type checker. An untyped receiver produces no edge (or a
   low-confidence guess for a distinctive method name), which is deliberate: a wrong edge costs more than a missing one.
 - Not extracted yet: OpenAPI documents (a client is joined to a route by URL, not by operation id), Go HTTP routes, validation
-  rules, environment variables, Helm templates (values files are read, see `[[mount]]`; a mount follows structs declared in the
+  rules, Helm templates (values files are read, see `[[mount]]`; a mount follows structs declared in the
   repository, a field of an imported type such as `corev1.ResourceRequirements` ends the pattern at that field), JSON payload keys as nodes, and knowledge nodes (requirements, tickets,
   decisions, documentation sections, features).
 - Client side, resolution is structural, not a type checker: a call through a value the extractor cannot follow (a Vuex

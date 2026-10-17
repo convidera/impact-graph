@@ -316,10 +316,16 @@ func (g *Graph) Index() {
 func (g *Graph) Has(id string) bool { _, ok := g.Nodes[id]; return ok }
 
 // Find returns nodes whose id or label contains text (case-insensitive), shortest id first.
-func (g *Graph) Find(text string, limit int) []*Node {
+func (g *Graph) Find(text string, limit int) []*Node { return g.FindIn(text, limit, "") }
+
+// FindIn is Find restricted to a repository (see InRepo).
+func (g *Graph) FindIn(text string, limit int, repo string) []*Node {
 	needle := strings.ToLower(text)
 	var out []*Node
 	for _, n := range g.Nodes {
+		if !g.InRepo(n, repo) {
+			continue
+		}
 		if strings.Contains(strings.ToLower(n.ID), needle) || strings.Contains(strings.ToLower(n.Label), needle) {
 			out = append(out, n)
 		}
