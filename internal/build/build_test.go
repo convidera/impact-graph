@@ -354,6 +354,8 @@ type Child struct {
 	Model string
 }
 
+type Key string
+
 type Provider interface {
 	Children() []Child
 }
@@ -378,12 +380,24 @@ func (Store) Children() []Child {
 	return []Child{{Cost: 1, Model: "m"}}
 }
 
-func (Store) ChildrenByName() map[string]Child {
-	return map[string]Child{"a": {Cost: 1}}
+func (Store) NoChildren() []Child {
+	return []Child{}
+}
+
+func (Store) ChildrenByKey() map[Key]Child {
+	return map[Key]Child{"a": {Cost: 1}}
 }
 
 func (Store) ChildrenArray() [2]Child {
 	return [2]Child{{Cost: 1}, {Cost: 2}}
+}
+
+func (Store) MakeChild() Child {
+	return Child{Cost: 1}
+}
+
+func (Store) MakeChildPtr() *Child {
+	return &Child{Cost: 1}
 }
 `,
 		"backend/app/Ingestor.php": `<?php
@@ -428,13 +442,34 @@ func TestGoInterfacesFieldsAndVocabulary(t *testing.T) {
 		t.Errorf("a keyed literal writes the field")
 	}
 	if !hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Creates) {
-		t.Errorf("a composite literal of a named struct type instantiates it: []Child{{...}} creates Child")
+		t.Errorf("an elided struct literal inside a non-empty slice instantiates the element type: []Child{{...}} creates Child")
 	}
-	if hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Uses) {
-		t.Errorf("a composite literal must not also be a uses edge")
+	if !hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("a slice literal of a named struct type also mentions it: []Child{...} uses Child")
 	}
-	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByName", "go:example.com/runtime/usage.Child", graph.Creates) {
-		t.Errorf("an elided struct literal inside a map literal creates the value type: map[string]Child{\"a\": {...}} creates Child")
+	makeChild := "go:example.com/runtime/usage.Store.MakeChild"
+	if !hasEdge(g, makeChild, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("a composite literal of a named struct type instantiates it: Child{...} creates Child")
+	}
+	if hasEdge(g, makeChild, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("a plain struct literal must not also be a uses edge (unlike a container literal)")
+	}
+	makeChildPtr := "go:example.com/runtime/usage.Store.MakeChildPtr"
+	if !hasEdge(g, makeChildPtr, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("&Child{...} still creates Child")
+	}
+	if !hasEdge(g, makeChildPtr, "go:example.com/runtime/usage.Child.Cost", graph.Writes) {
+		t.Errorf("a keyed field of &Child{Cost: 1} is still a writes edge, not swallowed by container handling")
+	}
+	noChildren := "go:example.com/runtime/usage.Store.NoChildren"
+	if hasEdge(g, noChildren, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an empty slice literal creates nothing: []Child{} must not create Child")
+	}
+	if !hasEdge(g, noChildren, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("an empty slice literal still mentions its element type: []Child{} uses Child")
+	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByKey", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside a map literal creates the value type: map[Key]Child{\"a\": {...}} creates Child")
 	}
 	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenArray", "go:example.com/runtime/usage.Child", graph.Creates) {
 		t.Errorf("an elided struct literal inside an array literal creates the element type: [2]Child{{...}} creates Child")
@@ -1215,5 +1250,36 @@ class H {
 		if c.want == -2 && got < 0.7 || c.want != -2 && got != c.want {
 			t.Errorf("%s: confidence %v: %s", c.src, got, c.why)
 		}
+	}
+}
+
+// TestMapTypeKeyRequiresBothKeyAndValueToResolve documents a deliberate narrowing: typeKey only treats
+// map[K]V as a named type (and so only gives an elided literal inside it a creates edge) when both K and
+// V resolve to a declared type. A builtin key such as string never resolves, so map[string]Child loses
+// the creates edge it would otherwise get (unlike map[Key]Child in TestGoInterfacesFieldsAndVocabulary,
+// where Key is a declared type) — a conservative trade-off to avoid reporting a malformed "map[]Child"
+// (indistinguishable from a key that failed to parse) for the very common builtin-keyed map.
+func TestMapTypeKeyRequiresBothKeyAndValueToResolve(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"runtime/go.mod": "module example.com/runtime\n\ngo 1.22\n",
+		"runtime/usage/usage.go": `package usage
+
+type Child struct {
+	Cost float64
+}
+
+type Store struct{}
+
+func (Store) ByBuiltinKey() map[string]Child {
+	return map[string]Child{"a": {Cost: 1}}
+}
+`,
+	})
+	g := index(t, root)
+	by := "go:example.com/runtime/usage.Store.ByBuiltinKey"
+	child := "go:example.com/runtime/usage.Child"
+	if hasEdge(g, by, child, graph.Creates) {
+		t.Errorf("a builtin (unresolved) map key suppresses the creates edge: map[string]Child{\"a\": {...}} does not create Child")
 	}
 }
