@@ -648,7 +648,7 @@ func (s *goScope) eval(n *ts.Node) string {
 			return t
 		}
 		if v, ok := s.f.pkg.Consts[s.f.src.text(n)]; ok {
-			s.mention(v, n, 0.85)
+			s.mentionConst(v, n, 0.85)
 		}
 		return ""
 	case "parenthesized_expression":
@@ -765,7 +765,12 @@ func (s *goScope) onRange(n *ts.Node) string {
 }
 
 func (s *goScope) mention(v string, n *ts.Node, conf float64) {
-	s.g.ctx.Vocab.mention(s.g.ctx, s.from, s.f.src.file.Path, v, s.f.src.evidence(n, "literal "+v), conf)
+	s.g.ctx.Vocab.mention(s.g.ctx, s.from, s.f.src.file.Path, v, s.f.src.evidence(n, "literal "+v), conf, true)
+}
+
+// mentionConst is mention for a value that comes in through a constant.
+func (s *goScope) mentionConst(v string, n *ts.Node, conf float64) {
+	s.g.ctx.Vocab.mention(s.g.ctx, s.from, s.f.src.file.Path, v, s.f.src.evidence(n, "constant "+v), conf, false)
 }
 
 func (s *goScope) onDeclare(left, right *ts.Node, _ []string) {
@@ -898,7 +903,7 @@ func (s *goScope) onSelector(n *ts.Node, write bool) string {
 			if ip, ok := s.f.imports[s.f.src.text(op)]; ok {
 				if pk := s.g.pkgs[ip]; pk != nil {
 					if v, ok := pk.Consts[name]; ok {
-						s.mention(v, n, 0.85)
+						s.mentionConst(v, n, 0.85)
 					}
 				}
 				return ""

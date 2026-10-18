@@ -276,7 +276,7 @@ func (s *tsScope) mention(v string, n *ts.Node) {
 	if s.quiet {
 		return
 	}
-	s.x.ctx.Vocab.mentionAs(s.x.ctx, s.sym.ID, s.m.Path, v, s.m.Src.evidence(n, "literal "+v), 0.9, graph.Consumes)
+	s.x.ctx.Vocab.mentionAs(s.x.ctx, s.sym.ID, s.m.Path, v, s.m.Src.evidence(n, "literal "+v), 0.9, graph.Consumes, true)
 }
 
 func (s *tsScope) onDeclaration(n *ts.Node) {
