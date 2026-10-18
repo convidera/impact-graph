@@ -354,6 +354,8 @@ type Child struct {
 	Model string
 }
 
+type Key string
+
 type Provider interface {
 	Children() []Child
 }
@@ -376,6 +378,30 @@ type Store struct{}
 
 func (Store) Children() []Child {
 	return []Child{{Cost: 1, Model: "m"}}
+}
+
+func (Store) NoChildren() []Child {
+	return []Child{}
+}
+
+func (Store) ChildrenByName() map[string]Child {
+	return map[string]Child{"a": {Cost: 1}}
+}
+
+func (Store) ChildrenByKey() map[Key]Child {
+	return map[Key]Child{"a": {Cost: 1}}
+}
+
+func (Store) ChildrenArray() [2]Child {
+	return [2]Child{{Cost: 1}, {Cost: 2}}
+}
+
+func (Store) MakeChild() Child {
+	return Child{Cost: 1}
+}
+
+func (Store) MakeChildPtr() *Child {
+	return &Child{Cost: 1}
 }
 `,
 		"backend/app/Ingestor.php": `<?php
@@ -418,6 +444,42 @@ func TestGoInterfacesFieldsAndVocabulary(t *testing.T) {
 	}
 	if !hasEdge(g, store, "go:example.com/runtime/usage.Child.Cost", graph.Writes) {
 		t.Errorf("a keyed literal writes the field")
+	}
+	if !hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside a non-empty slice instantiates the element type: []Child{{...}} creates Child")
+	}
+	if !hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("a slice literal of a named struct type also mentions it: []Child{...} uses Child")
+	}
+	makeChild := "go:example.com/runtime/usage.Store.MakeChild"
+	if !hasEdge(g, makeChild, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("a composite literal of a named struct type instantiates it: Child{...} creates Child")
+	}
+	if hasEdge(g, makeChild, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("a plain struct literal must not also be a uses edge (unlike a container literal)")
+	}
+	makeChildPtr := "go:example.com/runtime/usage.Store.MakeChildPtr"
+	if !hasEdge(g, makeChildPtr, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("&Child{...} still creates Child")
+	}
+	if !hasEdge(g, makeChildPtr, "go:example.com/runtime/usage.Child.Cost", graph.Writes) {
+		t.Errorf("a keyed field of &Child{Cost: 1} is still a writes edge, not swallowed by container handling")
+	}
+	noChildren := "go:example.com/runtime/usage.Store.NoChildren"
+	if hasEdge(g, noChildren, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an empty slice literal creates nothing: []Child{} must not create Child")
+	}
+	if !hasEdge(g, noChildren, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("an empty slice literal still mentions its element type: []Child{} uses Child")
+	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByName", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside a builtin-keyed map literal creates the value type: map[string]Child{\"a\": {...}} creates Child")
+	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByKey", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside a named-key map literal creates the value type: map[Key]Child{\"a\": {...}} creates Child")
+	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenArray", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside an array literal creates the element type: [2]Child{{...}} creates Child")
 	}
 	if !hasEdge(g, report, "go:example.com/runtime/usage.Child.Cost", graph.Reads) {
 		t.Errorf("c.Cost reads the field through a typed local")
@@ -573,6 +635,100 @@ func TestFrontendAndPythonJoinTheBackend(t *testing.T) {
 	p2 := mustTrace(t, g, "column:entries.note", run)
 	if p2[len(p2)-1].ID != run {
 		t.Errorf("a column read by the index action reaches the Python client that fetches it: %v", p2)
+	}
+}
+
+func TestInstantiationBecomesACreatesEdge(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"app/Money.php": `<?php
+namespace App;
+class Money {
+    public function __construct(private int $cents) {}
+}`,
+		"app/Wallet.php": `<?php
+namespace App;
+class Wallet {
+    public function __construct() {}
+    public static function empty(): self {
+        return new self();
+    }
+    public function deposit(int $cents): Money {
+        $m = new Money($cents);
+        return $m;
+    }
+    public function describe(Money $m): string {
+        return Money::class . (string) $m;
+    }
+}`,
+		"tsconfig.json": `{
+  "compilerOptions": { "baseUrl": ".", "paths": {} }
+}`,
+		"resources/js/wallet.ts": `export class Money {
+  constructor(public cents: number) {}
+}
+
+export class Wallet {
+  deposit(cents: number): Money {
+    const m = new Money(cents);
+    return m;
+  }
+
+  describe(m: Money): string {
+    return ` + "`${m.cents}`" + `;
+  }
+}
+`,
+		"worker/wallet.py": `class Money:
+    def __init__(self, cents):
+        self.cents = cents
+
+
+def deposit(cents):
+    return Money(cents)
+`,
+	})
+	g := index(t, root)
+
+	// PHP: `new Money(...)` is a creates edge (and still calls its constructor); a static call and a type hint stay uses.
+	deposit := `php:App\Wallet::deposit`
+	money := `php:App\Money`
+	if !hasEdge(g, deposit, money, graph.Creates) {
+		t.Errorf("`new Money($cents)` must create a creates edge from Wallet::deposit to Money")
+	}
+	if hasEdge(g, deposit, money, graph.Uses) {
+		t.Errorf("an instantiation must not also be recorded as a uses edge")
+	}
+	if !hasEdge(g, deposit, `php:App\Money::__construct`, graph.Calls) {
+		t.Errorf("`new Money(...)` must still call the constructor")
+	}
+	empty := `php:App\Wallet::empty`
+	wallet := `php:App\Wallet`
+	if !hasEdge(g, empty, wallet, graph.Creates) {
+		t.Errorf("`new self()` must create a creates edge to the enclosing class")
+	}
+	describe := `php:App\Wallet::describe`
+	if !hasEdge(g, describe, money, graph.Uses) {
+		t.Errorf("a static call (Money::class) and a type hint must keep the uses edge")
+	}
+	if hasEdge(g, describe, money, graph.Creates) {
+		t.Errorf("a static call and a type hint must not become a creates edge")
+	}
+
+	// TypeScript: `new Money(...)` is a creates edge; the type hint on the parameter stays uses.
+	tsDeposit := "ts:resources/js/wallet.ts#Wallet.deposit"
+	tsMoney := "ts:resources/js/wallet.ts#Money"
+	if !hasEdge(g, tsDeposit, tsMoney, graph.Creates) {
+		t.Errorf("`new Money(cents)` must create a creates edge from Wallet.deposit to Money")
+	}
+	tsDescribe := "ts:resources/js/wallet.ts#Wallet.describe"
+	if !hasEdge(g, tsDescribe, tsMoney, graph.Uses) {
+		t.Errorf("a type-hinted parameter (m: Money) must keep the uses edge")
+	}
+
+	// Python: calling a class constructs it.
+	if !hasEdge(g, "py:worker/wallet.py#deposit", "py:worker/wallet.py#Money", graph.Creates) {
+		t.Errorf("`Money(cents)` must create a creates edge from deposit to Money")
 	}
 }
 
@@ -1101,5 +1257,35 @@ class H {
 		if c.want == -2 && got < 0.7 || c.want != -2 && got != c.want {
 			t.Errorf("%s: confidence %v: %s", c.src, got, c.why)
 		}
+	}
+}
+
+// TestMapTypeKeyFallsBackToSourceTextWhenUnresolved checks typeKey's map_type representation directly
+// through the "type" property it stores on a struct field node: an unresolved (builtin) key falls back to
+// its source text, so a builtin-keyed map of a named value type still reads as "map[string]Child" (never
+// the ambiguous "map[]Child"), while a map whose value type doesn't resolve to anything named (a builtin
+// value, or a key/value pair neither of which matters once the value is unresolved) yields no type at all.
+func TestMapTypeKeyFallsBackToSourceTextWhenUnresolved(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"runtime/go.mod": "module example.com/runtime\n\ngo 1.22\n",
+		"runtime/usage/usage.go": `package usage
+
+type Child struct {
+	Cost float64
+}
+
+type Holder struct {
+	ByBuiltinKey map[string]Child
+	ByBuiltinAll map[string]string
+}
+`,
+	})
+	g := index(t, root)
+	if got := g.Nodes["go:example.com/runtime/usage.Holder.ByBuiltinKey"].Props["type"]; got != "map[string]example.com/runtime/usage.Child" {
+		t.Errorf("an unresolved (builtin) map key falls back to its source text: got type %q, want map[string]example.com/runtime/usage.Child", got)
+	}
+	if got := g.Nodes["go:example.com/runtime/usage.Holder.ByBuiltinAll"].Props["type"]; got != "" {
+		t.Errorf("a map whose value type doesn't resolve to a named type gets no type at all: got %q, want \"\"", got)
 	}
 }

@@ -156,7 +156,8 @@ const (
 	Consumes     = "consumes"      // function -> value it handles
 	Mentions     = "mentions"      // function or file -> value, role unknown
 	Exposes      = "exposes"       // function -> route or tool it serves
-	Uses         = "uses"          // function -> class it constructs, calls statically or type-hints
+	Uses         = "uses"          // function -> class it calls statically or type-hints
+	Creates      = "creates"       // function or method -> class it instantiates (`new Foo(...)`, a Go composite literal)
 	Extends      = "extends"       // child -> parent class, interface or trait
 	MemberOf     = "member_of"     // method or field -> its class
 	Registers    = "registers"     // class -> class it lists (a server's tools, a provider's bindings)
@@ -215,6 +216,7 @@ var Kinds = map[string]KindInfo{
 	Mentions:     {Data, Both, Both, 1.5, 1.5},
 	Exposes:      {Data, Fwd, Both, 1, 1},
 	Uses:         {Struct, Rev, None, 3, 3},
+	Creates:      {Struct, Rev, None, 3, 3},
 	Extends:      {Struct, Rev, None, 3, 3},
 	MemberOf:     {Struct, Fwd, None, 3, 3},
 	Registers:    {Struct, Rev, None, 2, 2},

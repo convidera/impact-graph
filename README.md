@@ -53,7 +53,9 @@ In convidera/managed-coding-service the same commands run as `devops agents impa
 **PHP and Laravel** (zero configuration):
 
 - classes, methods, properties, traits, enums, interfaces; calls resolved through typed parameters, promoted constructor
-  properties, `@var` / `@property` / `@return` docblocks, return types, `new`, `static`/`self`/`parent` and inheritance
+  properties, `@var` / `@property` / `@return` docblocks, return types, `new`, `static`/`self`/`parent` and inheritance.
+  `new Foo(...)` becomes a `creates` edge (the class it constructs) in addition to the `calls` edge to its constructor; a
+  static call or a type hint stays `uses`.
 - the **database schema** from the migrations (`up()` only, applied in file order: create, add, drop, rename), each model's
   table (`$table` or the plural snake-case name), and for every Eloquent call the columns it **reads** (`where`, `orderBy`,
   `join`, `sum`, ... on a typed query), **writes** (`create`, `update`, `fill`, `insert`, `updateOrCreate`, a `new Model([...])`)
@@ -64,12 +66,15 @@ In convidera/managed-coding-service the same commands run as `devops agents impa
   running `toArray()`, `Job::dispatch()` running `handle()`, calls through an interface reaching every implementation
 
 **Go**: packages and modules, types, struct fields (reads and writes, also through keyed literals and elided slice
-elements), methods through embedded types, calls through interfaces to every type that has the interface's methods.
+elements), methods through embedded types, calls through interfaces to every type that has the interface's methods. A
+composite literal of a named struct type (`Foo{...}`, `&Foo{...}`, including one elided inside a slice or map literal)
+becomes a `creates` edge.
 
 **TypeScript, JavaScript and Vue** (zero configuration): functions at any nesting depth (a composable and the handlers inside
 it), classes, object-literal members, types, one symbol per module and per component. Calls are resolved through imports
 (relative paths and the `@/` aliases of `tsconfig`, re-exports), `new`, `this`, typed parameters and what a function returns,
 so `const { start } = useStartSession(); start()` and `useSessionApi().sessionsIndex()` reach the function that is called.
+`new Foo(...)` becomes a `creates` edge (the class it constructs) in addition to the `calls` edge to its constructor.
 Vue single-file components are parsed from their `<script>` blocks; the template links a component to the children it renders
 and to the script functions its `@click`, `v-` and `{{ }}` expressions call. **HTTP calls** (`axios.post('v1/entries')`,
 `fetch(url, {method})`, a generated client's `axiosInstance.get('/sessions')`) become `requests` edges to the backend route
@@ -78,7 +83,7 @@ controller → feature → column. A base-URL prefix the client supplies (`/api`
 
 **Python** (zero configuration): modules, classes, functions and methods; imports (absolute inside the repository and
 relative, `from . import auth`, `from .api import call`), calls to imported functions and module attributes, `self.method()`,
-`self.attr.method()` where `__init__` assigned the attribute a class, constructors, and HTTP calls to routes
+`self.attr.method()` where `__init__` assigned the attribute a class, constructors (calling a class is a `creates` edge to it), and HTTP calls to routes
 (`requests.get("https://host/api/x")`, f-strings).
 
 **OpenAPI** (zero configuration): a JSON or YAML document with a top-level `openapi` or `swagger` key becomes `schema` and
@@ -163,7 +168,7 @@ contracts they share.
 
 After every `impact index` the symbols and contracts are clustered into **communities** (subsystems) with the Leiden algorithm,
 a pure Go implementation that is deterministic for a seed. Edge weights depend on the kind (1 for calls, reads, writes,
-requests and similar; 1.5 for `maps_to`; 3 for `member_of`; 0.5 for `uses`, `registers` and `mentions`) times the edge
+requests and similar; 1.5 for `maps_to`; 3 for `member_of`; 0.5 for `uses`, `creates`, `registers` and `mentions`) times the edge
 confidence; docs and git history do not count, and edges below 0.5 are ignored. Hubs (weighted degree above the 99th
 percentile) are left out of the clustering and assigned afterwards to the community they connect to most, and so are test
 symbols. A community with fewer than `min_size` members (default 5) is dissolved: each of its members moves to the kept

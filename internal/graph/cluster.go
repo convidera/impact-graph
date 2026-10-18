@@ -34,7 +34,7 @@ func clusterKindWeight(kind string) float64 {
 		return 1.5
 	case MemberOf:
 		return 3
-	case Uses, Registers, Mentions:
+	case Uses, Creates, Registers, Mentions:
 		return 0.5
 	}
 	return 0

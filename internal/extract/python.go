@@ -561,7 +561,7 @@ func (s *pyScope) onCall(n *ts.Node) {
 		case "function", "method":
 			s.edge(t, graph.Calls, 0.95, n, "")
 		case "class":
-			s.edge(t, graph.Uses, 1, n, "")
+			s.edge(t, graph.Creates, 1, n, "")
 			if ctor := s.x.memberOf(t, "__init__"); ctor != nil {
 				s.edge(ctor, graph.Calls, 1, n, "constructs "+t.Name)
 			}
