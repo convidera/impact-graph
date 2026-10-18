@@ -10,6 +10,7 @@ import (
 
 	"github.com/convidera/impact-graph/internal/build"
 	"github.com/convidera/impact-graph/internal/config"
+	"github.com/convidera/impact-graph/internal/extract"
 	"github.com/convidera/impact-graph/internal/graph"
 	"github.com/convidera/impact-graph/internal/review"
 )
@@ -779,5 +780,218 @@ func TestMountJoinsAValuesFileToTheGoStructItFeeds(t *testing.T) {
 	_, found := hits["acme/svc//"+field]
 	if !found {
 		t.Errorf("impact of the deployment value must reach the Go field")
+	}
+}
+
+func TestBareWordVocabularyNeedsCorroboration(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"impact.toml": `
+[[vocabulary]]
+name = "event"
+type = "event"
+values = ["error", "usage_update"]
+produce = ["svc/**"]
+consume = ["web/**"]
+`,
+		"go.mod": "module example.com/svc\n\ngo 1.22\n",
+		"svc/a.go": `package svc
+
+func Log() string { return "error" }
+
+func Emit() []string { return []string{"error", "usage_update"} }
+`,
+		"web/handler.ts": `export function handle(t: string) {
+  switch (t) {
+    case 'error': return 1
+    case 'usage_update': return 2
+  }
+}
+export function unrelated() { return 'error' }
+`,
+	}
+	for i := 0; i < extract.NarrowFiles+1; i++ { // a vocabulary spread over a tree, not pinned to a few files
+		files["svc/pad"+strconv.Itoa(i)+".go"] = "package svc\n"
+	}
+	write(t, root, files)
+	g := index(t, root)
+	conf := func(src, dst string) float64 {
+		for _, e := range g.Edges {
+			if e.Src == src && e.Dst == dst {
+				return e.Conf
+			}
+		}
+		return -1
+	}
+	var log, emit, handle, unrelated string
+	for _, n := range g.Nodes {
+		switch {
+		case strings.HasSuffix(n.ID, "svc.Log"):
+			log = n.ID
+		case strings.HasSuffix(n.ID, "svc.Emit"):
+			emit = n.ID
+		case strings.HasSuffix(n.ID, "#handle"):
+			handle = n.ID
+		case strings.HasSuffix(n.ID, "#unrelated"):
+			unrelated = n.ID
+		}
+	}
+	if log == "" || emit == "" || handle == "" || unrelated == "" {
+		t.Fatalf("fixture symbols not found: %q %q %q %q", log, emit, handle, unrelated)
+	}
+	if c := conf(emit, "event:error"); c < 0.7 {
+		t.Errorf("an emitter that also names another event keeps the edge, got %v", c)
+	}
+	if c := conf(handle, "event:error"); c < 0.7 {
+		t.Errorf("a handler that matches several events keeps the edge, got %v", c)
+	}
+	if c := conf(log, "event:error"); c != extract.AmbiguousConf {
+		t.Errorf("a lone bare-word literal is a guess, got %v", c)
+	}
+	if c := conf(unrelated, "event:error"); c != extract.AmbiguousConf {
+		t.Errorf("a lone bare-word literal is a guess, got %v", c)
+	}
+	if c := conf(emit, "event:usage_update"); c < 0.7 {
+		t.Errorf("a specific value is never downgraded, got %v", c)
+	}
+}
+
+func TestCoChangeConfidenceIsSymmetric(t *testing.T) {
+	root := t.TempDir()
+	gitIn(t, root, "init", "-q")
+	// busy.go changes in every commit; rare.md rides along twice: it must not be tied to busy.go as closely as a real pair
+	for i := 0; i < 6; i++ {
+		files := map[string]string{"busy.go": "package x\n// " + strconv.Itoa(i) + "\n", "pair-a.go": "package x\n// " + strconv.Itoa(i) + "\n", "pair-b.go": "package x\n// " + strconv.Itoa(i) + "\n"}
+		if i < 3 {
+			files["rare.go"] = "package x\n// " + strconv.Itoa(i) + "\n"
+		}
+		write(t, root, files)
+		gitIn(t, root, "add", "-A")
+		gitIn(t, root, "commit", "-q", "-m", "c"+strconv.Itoa(i))
+	}
+	g := index(t, root)
+	var rare, pair float64
+	for _, e := range g.Edges {
+		if e.Kind != graph.CoChanged {
+			continue
+		}
+		if e.Src == "file:pair-a.go" && e.Dst == "file:pair-b.go" {
+			pair = e.Conf
+		}
+		if e.Src == "file:busy.go" && e.Dst == "file:rare.go" || e.Src == "file:rare.go" && e.Dst == "file:busy.go" {
+			rare = e.Conf
+		}
+	}
+	if pair != 1 {
+		t.Errorf("files that always change together have confidence 1, got %v", pair)
+	}
+	if rare != 0.5 {
+		t.Errorf("a file that rides along in half of the commits has confidence 0.5, got %v", rare)
+	}
+}
+
+func TestBareWordIsTrustedWhenTheVocabularyDeclaresItOrIsPinnedToFewFiles(t *testing.T) {
+	files := map[string]string{
+		"impact.toml": `
+[[vocabulary]]
+name = "declared"
+type = "key"
+file = "keys.json"
+list = "keys"
+produce = ["a/**"]
+consume = ["b/**"]
+
+[[vocabulary]]
+name = "pinned"
+type = "cfg"
+values = ["prompt"]
+produce = ["a/one.go"]
+consume = ["b/one.go"]
+`,
+		"keys.json": `{"keys": [{"name": "owner", "ambiguous": false}, {"name": "title"}]}`,
+		"go.mod":    "module example.com/a\n\ngo 1.22\n",
+		"a/one.go":  "package a\n\nfunc Owner() string { return \"owner\" }\n\nfunc Title() string { return \"title\" }\n\nfunc Prompt() string { return \"prompt\" }\n",
+		"b/one.go":  "package b\n\nfunc Prompt() string { return \"prompt\" }\n",
+	}
+	for i := 0; i < extract.NarrowFiles+1; i++ {
+		files["a/pad"+strconv.Itoa(i)+".go"] = "package a\n"
+	}
+	root := t.TempDir()
+	write(t, root, files)
+	g := index(t, root)
+	conf := func(suffix, dst string) float64 {
+		for _, e := range g.Edges {
+			if strings.HasSuffix(e.Src, suffix) && e.Dst == dst {
+				return e.Conf
+			}
+		}
+		return -1
+	}
+	if c := conf("a.Owner", "key:owner"); c < 0.7 {
+		t.Errorf("an entry that says ambiguous=false is trusted, got %v", c)
+	}
+	if c := conf("a.Title", "key:title"); c != extract.AmbiguousConf {
+		t.Errorf("an undeclared bare word over a wide role is a guess, got %v", c)
+	}
+	if c := conf("a.Prompt", "cfg:prompt"); c < 0.7 {
+		t.Errorf("a vocabulary pinned to one file is trusted, got %v", c)
+	}
+}
+
+func TestABareWordThatComesInThroughAConstantIsNotDowngraded(t *testing.T) {
+	files := map[string]string{
+		"impact.toml": `
+[[vocabulary]]
+name = "event"
+type = "event"
+values = ["error"]
+produce = ["svc/**"]
+consume = ["app/**"]
+`,
+		"go.mod": "module example.com/svc\n\ngo 1.22\n",
+		"svc/a.go": `package svc
+
+const TypeError = "error"
+
+func ViaConst() string { return TypeError }
+
+func ViaLiteral() string { return "error" }
+`,
+		"app/E.php": `<?php
+namespace App;
+class E { const ERR = 'error'; }
+class H {
+    public function viaConst() { return E::ERR; }
+    public function viaLiteral() { return 'error'; }
+}`,
+	}
+	for i := 0; i < extract.NarrowFiles+1; i++ {
+		files["svc/pad"+strconv.Itoa(i)+".go"] = "package svc\n"
+	}
+	root := t.TempDir()
+	write(t, root, files)
+	g := index(t, root)
+	conf := func(suffix string) float64 {
+		for _, e := range g.Edges {
+			if strings.HasSuffix(e.Src, suffix) && e.Dst == "event:error" {
+				return e.Conf
+			}
+		}
+		return -1
+	}
+	for _, c := range []struct {
+		src  string
+		want float64
+		why  string
+	}{
+		{"svc.ViaConst", -2, "a constant names the value on purpose"},
+		{"svc.ViaLiteral", extract.AmbiguousConf, "a lone literal is a guess"},
+		{`App\H::viaConst`, -2, "a class constant names the value on purpose"},
+		{`App\H::viaLiteral`, extract.AmbiguousConf, "a lone literal is a guess"},
+	} {
+		got := conf(c.src)
+		if c.want == -2 && got < 0.7 || c.want != -2 && got != c.want {
+			t.Errorf("%s: confidence %v: %s", c.src, got, c.why)
+		}
 	}
 }

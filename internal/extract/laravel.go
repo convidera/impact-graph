@@ -370,7 +370,7 @@ func (p *php) registerTools() {
 		} else {
 			g.AddEdge(c.ID, id, graph.Exposes, 0.9, c.File.src.file.Path)
 		}
-		p.ctx.Vocab.add(name, id, nil, nil)
+		p.ctx.Vocab.add(name, id, "mcp-tool", nil, nil, true)
 	}
 }
 

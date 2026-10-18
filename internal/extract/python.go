@@ -530,7 +530,7 @@ func (s *pyScope) eval(n *ts.Node) {
 		return
 	case "string":
 		if v := s.stringValue(n); v != "" && !strings.Contains(v, "\x00") {
-			s.x.ctx.Vocab.mentionAs(s.x.ctx, s.sym.ID, s.m.Path, v, s.m.Src.evidence(n, "literal "+v), 0.9, graph.Consumes)
+			s.x.ctx.Vocab.mentionAs(s.x.ctx, s.sym.ID, s.m.Path, v, s.m.Src.evidence(n, "literal "+v), 0.9, graph.Consumes, true)
 		}
 		return
 	case "function_definition", "class_definition":

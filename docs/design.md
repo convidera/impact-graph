@@ -1,7 +1,8 @@
 # Design: a repository knowledge graph for agents
 
-Status: the engine is built (this directory). The platform integration (repository catalog, indexer job, snapshot storage, MCP
-tools served by MCS, UI) is planned. Decision D25 in [docs/architecture/decisions.md](https://github.com/convidera/managed-coding-service/blob/main/docs/architecture/decisions.md).
+Status: the engine is built (this directory). The platform integration is built as far as the pod: the index step after every
+clone, the `impact` MCP server in the session pod and the repository explorer. The repository catalog, snapshot storage in MCS
+and the project-wide graph are planned. Decision D25 in [docs/architecture/decisions.md](https://github.com/convidera/managed-coding-service/blob/main/docs/architecture/decisions.md).
 
 ## Goal
 
@@ -60,7 +61,7 @@ unrelated reasons: a join on it would be a guess that a query cannot tell from a
 the code. What crosses a process boundary (an event type, a price written into another program's config) needs one declaration
 with a written reason, and a golden flow that fails when it breaks.
 
-## Platform integration (planned)
+## Platform integration (pod side built, catalog planned)
 
 Detailed in [docs/architecture/impact-integration.md](../../docs/architecture/impact-integration.md). In short:
 
