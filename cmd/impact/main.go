@@ -30,6 +30,7 @@ const usage = `impact: ask a repository what a change influences.
   impact meet <a> <b>               the columns, fields and events two things share: how <a> reaches <b>
   impact hubs                       god nodes: the most connected symbols and contracts, how many communities they bridge, where a change floods (alias: god-nodes)
   impact review                     what the working tree or branch changes, and what it leaves out, and the [[obligation]]s it does not meet (--strict: fail on those)
+  impact query repos|nodes|node    the structured answers of a graph browser as JSON: repositories and how they connect, a node search, one node's neighbours
   impact suggest                    candidate [[obligation]] tables mined from git history, to confirm and paste into impact.toml
   impact merge <snapshot>...        combine the snapshots of several repositories into one graph (--out <file>)
   impact golden                     check the flows pinned in impact.toml
@@ -140,6 +141,8 @@ func main() {
 		err = cmdReview(args)
 	case "suggest":
 		err = cmdSuggest(args)
+	case "query":
+		err = cmdQuery(args)
 	case "golden":
 		err = cmdGolden(args)
 	case "check":
@@ -153,9 +156,23 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "impact:", err)
 		pprof.StopCPUProfile()
+		var bad invalidArg
+		if errors.As(err, &bad) {
+			os.Exit(exitInvalidArgument)
+		}
 		os.Exit(1)
 	}
 }
+
+// exitInvalidArgument is the exit status of a command whose argument names nothing in the graph (a node that does not
+// exist or is ambiguous, an unknown repository): the caller's input is wrong, nothing broke. Other failures exit 1.
+const exitInvalidArgument = 2
+
+// invalidArg marks an error as the caller's: see exitInvalidArgument.
+type invalidArg struct{ err error }
+
+func (e invalidArg) Error() string { return e.err.Error() }
+func (e invalidArg) Unwrap() error { return e.err }
 
 func cmdIndex(args []string) error {
 	var c common
@@ -297,14 +314,14 @@ func resolve(g *graph.Graph, text string) (string, error) {
 		return id, nil
 	}
 	if len(cands) == 0 {
-		return "", fmt.Errorf("no node matches %q", text)
+		return "", invalidArg{fmt.Errorf("no node matches %q", text)}
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%q is ambiguous, pick one:", text)
 	for _, n := range cands {
 		fmt.Fprintf(&b, "\n  %s", n.ID)
 	}
-	return "", fmt.Errorf("%s", b.String())
+	return "", invalidArg{fmt.Errorf("%s", b.String())}
 }
 
 func cmdImpact(args []string) error {

@@ -27,6 +27,7 @@ type Change struct {
 
 // Item is something related to the change that the change does not contain.
 type Item struct {
+	Repo    string  `json:"repo,omitempty"` // owner/name, only for an item outside the reviewed repository of a merged graph
 	Path    string  `json:"path"`
 	Group   string  `json:"group"` // tests, docs, contracts, code, together
 	Cost    float64 `json:"cost"`
@@ -134,10 +135,14 @@ func Changes(root, base string) ([]Change, error) {
 type Options struct {
 	// Obligations are the declared companion-change rules to check; nil checks none.
 	Obligations []config.Obligation
-	MaxCost     float64
-	MinConf     float64
-	Together    float64 // minimum confidence of a co-change edge
-	PerGroup    int
+	// Repo is the repository (owner/name) the changes belong to when the graph is a merge of several: only its nodes are
+	// matched to the changed files, and what is found in other repositories is labelled with its own. Empty for a snapshot
+	// of one repository.
+	Repo     string
+	MaxCost  float64
+	MinConf  float64
+	Together float64 // minimum confidence of a co-change edge
+	PerGroup int
 }
 
 // DefaultOptions are what the CLI and the MCP tool use.
@@ -154,8 +159,15 @@ func Run(g *graph.Graph, base string, changes []Change, o Options) Report {
 	sort.Strings(rep.Changed)
 	rep.Unmet = Obligations(o.Obligations, rep.Changed)
 
+	idp := ""
+	if o.Repo != "" {
+		idp = o.Repo + "//" // the ids of a repository's nodes in a merged graph
+	}
 	byPath := map[string][]*graph.Node{}
 	for _, n := range g.Nodes {
+		if o.Repo != "" && n.Repo != o.Repo {
+			continue
+		}
 		if n.Path != "" && n.Type != graph.TypeFile && n.Type != graph.TypeTest && n.Type != graph.TypeDoc {
 			byPath[n.Path] = append(byPath[n.Path], n)
 		}
@@ -166,8 +178,8 @@ func Run(g *graph.Graph, base string, changes []Change, o Options) Report {
 		for _, n := range nodes {
 			starts = append(starts, n.ID)
 		}
-		if len(nodes) == 0 && g.Has("file:"+c.File) {
-			starts = append(starts, "file:"+c.File)
+		if len(nodes) == 0 && g.Has(idp+"file:"+c.File) {
+			starts = append(starts, idp+"file:"+c.File)
 		}
 	}
 	sort.Strings(starts)
@@ -175,14 +187,19 @@ func Run(g *graph.Graph, base string, changes []Change, o Options) Report {
 	rep.Areas = areas(g, starts)
 
 	found := map[string]*Item{}
-	consider := func(path, group string, cost, conf float64, why, example string) {
-		if path == "" || changed[path] {
+	consider := func(repo, path, group string, cost, conf float64, why, example string) {
+		own := o.Repo == "" || repo == o.Repo
+		if path == "" || (own && changed[path]) {
 			return
 		}
-		key := group + "\x00" + path
+		label := ""
+		if !own {
+			label = repo
+		}
+		key := group + "\x00" + label + "\x00" + path
 		it := found[key]
 		if it == nil {
-			found[key] = &Item{Path: path, Group: group, Cost: cost, Conf: conf, Why: why, Nodes: 1, Example: example}
+			found[key] = &Item{Repo: label, Path: path, Group: group, Cost: cost, Conf: conf, Why: why, Nodes: 1, Example: example}
 			return
 		}
 		it.Nodes++
@@ -214,21 +231,21 @@ func Run(g *graph.Graph, base string, changes []Change, o Options) Report {
 				}
 			}
 			path := PathString(g, hits, id)
-			consider(n.Path, group, h.Cost, h.Conf, path, id)
+			consider(n.Repo, n.Path, group, h.Cost, h.Conf, path, id)
 		}
 	}
 	// files that usually change together with a changed file
 	for _, c := range changes {
-		for _, i := range g.Out("file:" + c.File) {
+		for _, i := range g.Out(idp + "file:" + c.File) {
 			e := g.Edges[i]
 			if e.Kind == graph.CoChanged && e.Conf >= o.Together {
-				consider(strings.TrimPrefix(e.Dst, "file:"), "together", 2, e.Conf, c.File+" "+e.Evidence, e.Dst)
+				consider(o.Repo, strings.TrimPrefix(e.Dst, idp+"file:"), "together", 2, e.Conf, c.File+" "+e.Evidence, e.Dst)
 			}
 		}
-		for _, i := range g.In("file:" + c.File) {
+		for _, i := range g.In(idp + "file:" + c.File) {
 			e := g.Edges[i]
 			if e.Kind == graph.CoChanged && e.Conf >= o.Together {
-				consider(strings.TrimPrefix(e.Src, "file:"), "together", 2, e.Conf, c.File+" "+e.Evidence, e.Src)
+				consider(o.Repo, strings.TrimPrefix(e.Src, idp+"file:"), "together", 2, e.Conf, c.File+" "+e.Evidence, e.Src)
 			}
 		}
 	}
@@ -412,7 +429,11 @@ func Text(r Report, perGroup int) string {
 				fmt.Fprintf(&b, "  ... %d more\n", len(items)-perGroup)
 				break
 			}
-			fmt.Fprintf(&b, "  %s  [cost %.1f, confidence %.2f]\n      because %s\n", it.Path, it.Cost, it.Conf, it.Why)
+			where := it.Path
+			if it.Repo != "" {
+				where = it.Repo + ": " + it.Path
+			}
+			fmt.Fprintf(&b, "  %s  [cost %.1f, confidence %.2f]\n      because %s\n", where, it.Cost, it.Conf, it.Why)
 		}
 	}
 	if len(r.Items) == 0 && len(r.Unmet) == 0 {

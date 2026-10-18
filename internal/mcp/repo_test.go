@@ -48,7 +48,7 @@ func TestRepositoryArgumentRestrictsTheReadTools(t *testing.T) {
 		props := m["inputSchema"].(map[string]any)["properties"].(map[string]any)
 		_, has := props["repository"]
 		name := m["name"].(string)
-		want := name == "impact_find" || name == "impact_overview" || name == "impact_community" || name == "impact_god_nodes"
+		want := name == "impact_find" || name == "impact_overview" || name == "impact_community" || name == "impact_god_nodes" || name == "impact_review"
 		if has != want {
 			t.Errorf("%s: repository argument listed = %v, want %v", name, has, want)
 		}
