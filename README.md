@@ -55,7 +55,7 @@ In convidera/managed-coding-service the same commands run as `devops agents impa
 - classes, methods, properties, traits, enums, interfaces; calls resolved through typed parameters, promoted constructor
   properties, `@var` / `@property` / `@return` docblocks, return types, `new`, `static`/`self`/`parent` and inheritance.
   `new Foo(...)` becomes a `creates` edge (the class it constructs) in addition to the `calls` edge to its constructor; a
-  static call or a type hint stays `uses`
+  static call or a type hint stays `uses`.
 - the **database schema** from the migrations (`up()` only, applied in file order: create, add, drop, rename), each model's
   table (`$table` or the plural snake-case name), and for every Eloquent call the columns it **reads** (`where`, `orderBy`,
   `join`, `sum`, ... on a typed query), **writes** (`create`, `update`, `fill`, `insert`, `updateOrCreate`, a `new Model([...])`)

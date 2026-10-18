@@ -259,8 +259,42 @@ func (g *golang) typeKey(f *goFile, n *ts.Node) string {
 		if e := g.typeKey(f, field(n, "element")); e != "" {
 			return "[]" + e
 		}
+	case "map_type":
+		if v := g.typeKey(f, field(n, "value")); v != "" {
+			return "map[" + g.typeKey(f, field(n, "key")) + "]" + v
+		}
 	}
 	return ""
+}
+
+// elementType peels one layer of container off a composite literal's type, returning the type an elided
+// nested literal (`{...}`) inside it refers to: the element type of []T and [N]T, the value type of
+// map[K]T (K may itself contain brackets, e.g. map[[2]int]T), and T for a leading *T (an elided literal
+// in a []*T is implicitly &T{...}). Anything else is returned unchanged.
+func elementType(expected string) string {
+	expected = strings.TrimPrefix(expected, "*")
+	switch {
+	case strings.HasPrefix(expected, "[]"):
+		return strings.TrimPrefix(expected[len("[]"):], "*")
+	case strings.HasPrefix(expected, "["):
+		if i := strings.IndexByte(expected, ']'); i >= 0 {
+			return strings.TrimPrefix(expected[i+1:], "*")
+		}
+	case strings.HasPrefix(expected, "map["):
+		depth := 0
+		for i := len("map["); i < len(expected); i++ {
+			switch expected[i] {
+			case '[':
+				depth++
+			case ']':
+				if depth == 0 {
+					return strings.TrimPrefix(expected[i+1:], "*")
+				}
+				depth--
+			}
+		}
+	}
+	return expected
 }
 
 // mapElem is the element type key of a map type (or a pointer to one), "" for any other type.
@@ -829,15 +863,16 @@ func (s *goScope) evalMulti(n *ts.Node) []string {
 
 func (s *goScope) onComposite(n *ts.Node) string {
 	ty := s.g.typeKey(s.f, field(n, "type"))
-	if t := s.g.types[strings.TrimPrefix(ty, "[]")]; t != nil {
+	if t := s.g.types[elementType(ty)]; t != nil {
 		s.edge("go:"+t.Key, graph.Creates, 1, n, "")
 	}
 	s.literalBody(ty, field(n, "body"))
 	return ty
 }
 
-// literalBody walks the body of a composite literal of type ty. In a slice literal an element may omit its type
-// (`[]Child{{Cost: 1}}`), which is then the element type of the slice.
+// literalBody walks the body of a composite literal of type ty. In a slice, array or map literal an
+// element may omit its type (`[]Child{{Cost: 1}}`, `map[string]Child{"a": {Cost: 1}}`), which is then
+// the element or value type of ty (see elementType).
 func (s *goScope) literalBody(ty string, body *ts.Node) {
 	if body == nil {
 		return
@@ -849,7 +884,7 @@ func (s *goScope) literalBody(ty string, body *ts.Node) {
 			if len(k) != 2 {
 				continue
 			}
-			if ty != "" && !strings.HasPrefix(ty, "[]") {
+			if ty != "" && elementType(ty) == ty {
 				if f, ok := s.g.fieldOf(ty, s.f.src.text(k[0])); ok {
 					s.edge(f.ID, graph.Writes, 0.95, el, "field of "+lastSegment(ty, ".")+" set in a literal")
 				}
@@ -857,16 +892,21 @@ func (s *goScope) literalBody(ty string, body *ts.Node) {
 			s.evalElement(k[0], "") // a string key of a map literal is a value like any other (`"prompt": spec.Prompt`)
 			s.evalElement(k[1], fieldType(s.g, ty, s.f.src.text(k[0])))
 		case "literal_element":
-			s.evalElement(el, strings.TrimPrefix(ty, "[]"))
+			s.evalElement(el, elementType(ty))
 		default:
 			s.eval(el)
 		}
 	}
 }
 
+// fieldType is the expected type of a keyed_element's value: the element/value type of a container ty
+// (slice, array, map or pointer), regardless of the key, or the named field's type of a struct ty.
 func fieldType(g *golang, ty, name string) string {
-	if ty == "" || strings.HasPrefix(ty, "[]") {
+	if ty == "" {
 		return ""
+	}
+	if et := elementType(ty); et != ty {
+		return et
 	}
 	if f, ok := g.fieldOf(ty, name); ok {
 		return f.Type
@@ -882,7 +922,7 @@ func (s *goScope) evalElement(n *ts.Node, expected string) {
 		}
 	}
 	if n.Kind() == "literal_value" {
-		if t := s.g.types[strings.TrimPrefix(expected, "[]")]; t != nil {
+		if t := s.g.types[elementType(expected)]; t != nil {
 			s.edge("go:"+t.Key, graph.Creates, 1, n, "")
 		}
 		s.literalBody(expected, n)

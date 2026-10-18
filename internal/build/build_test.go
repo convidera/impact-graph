@@ -377,6 +377,14 @@ type Store struct{}
 func (Store) Children() []Child {
 	return []Child{{Cost: 1, Model: "m"}}
 }
+
+func (Store) ChildrenByName() map[string]Child {
+	return map[string]Child{"a": {Cost: 1}}
+}
+
+func (Store) ChildrenArray() [2]Child {
+	return [2]Child{{Cost: 1}, {Cost: 2}}
+}
 `,
 		"backend/app/Ingestor.php": `<?php
 namespace App;
@@ -424,6 +432,12 @@ func TestGoInterfacesFieldsAndVocabulary(t *testing.T) {
 	}
 	if hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Uses) {
 		t.Errorf("a composite literal must not also be a uses edge")
+	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByName", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside a map literal creates the value type: map[string]Child{\"a\": {...}} creates Child")
+	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenArray", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside an array literal creates the element type: [2]Child{{...}} creates Child")
 	}
 	if !hasEdge(g, report, "go:example.com/runtime/usage.Child.Cost", graph.Reads) {
 		t.Errorf("c.Cost reads the field through a typed local")

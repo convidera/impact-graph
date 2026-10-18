@@ -286,17 +286,21 @@ func (s *scope) mentionConst(val string, n *ts.Node, conf float64) {
 	s.p.ctx.Vocab.mention(s.p.ctx, s.from, s.f.src.file.Path, val, s.ev(n, "constant "+val), conf, false)
 }
 
-func (s *scope) useClass(fqn string, n *ts.Node) {
+// classEdge adds an edge of kind (graph.Uses for a static call or type hint, graph.Creates for a
+// `new X(...)` instantiation) to the class fqn, if it is known.
+func (s *scope) classEdge(kind, fqn string, n *ts.Node) {
 	if c := s.p.classes[fqn]; c != nil {
-		s.edge(c.ID, graph.Uses, 1, n, "")
+		s.edge(c.ID, kind, 1, n, "")
 	}
+}
+
+func (s *scope) useClass(fqn string, n *ts.Node) {
+	s.classEdge(graph.Uses, fqn, n)
 }
 
 // createsClass is useClass for a `new X(...)` instantiation: the edge is `creates`, not `uses`.
 func (s *scope) createsClass(fqn string, n *ts.Node) {
-	if c := s.p.classes[fqn]; c != nil {
-		s.edge(c.ID, graph.Creates, 1, n, "")
-	}
+	s.classEdge(graph.Creates, fqn, n)
 }
 
 func (s *scope) resolveScope(n *ts.Node) string {
