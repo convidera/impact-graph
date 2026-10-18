@@ -623,6 +623,14 @@ export class Wallet {
   }
 }
 `,
+		"worker/wallet.py": `class Money:
+    def __init__(self, cents):
+        self.cents = cents
+
+
+def deposit(cents):
+    return Money(cents)
+`,
 	})
 	g := index(t, root)
 
@@ -660,6 +668,11 @@ export class Wallet {
 	tsDescribe := "ts:resources/js/wallet.ts#Wallet.describe"
 	if !hasEdge(g, tsDescribe, tsMoney, graph.Uses) {
 		t.Errorf("a type-hinted parameter (m: Money) must keep the uses edge")
+	}
+
+	// Python: calling a class constructs it.
+	if !hasEdge(g, "py:worker/wallet.py#deposit", "py:worker/wallet.py#Money", graph.Creates) {
+		t.Errorf("`Money(cents)` must create a creates edge from deposit to Money")
 	}
 }
 

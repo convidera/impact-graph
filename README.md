@@ -83,7 +83,7 @@ controller → feature → column. A base-URL prefix the client supplies (`/api`
 
 **Python** (zero configuration): modules, classes, functions and methods; imports (absolute inside the repository and
 relative, `from . import auth`, `from .api import call`), calls to imported functions and module attributes, `self.method()`,
-`self.attr.method()` where `__init__` assigned the attribute a class, constructors, and HTTP calls to routes
+`self.attr.method()` where `__init__` assigned the attribute a class, constructors (calling a class is a `creates` edge to it), and HTTP calls to routes
 (`requests.get("https://host/api/x")`, f-strings).
 
 **OpenAPI** (zero configuration): a JSON or YAML document with a top-level `openapi` or `swagger` key becomes `schema` and
