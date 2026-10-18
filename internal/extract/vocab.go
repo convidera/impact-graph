@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/convidera/impact-graph/internal/config"
@@ -28,7 +27,8 @@ import (
 type Vocab struct {
 	mu      sync.Mutex
 	byValue map[string][]vocabRef
-	// corroborated holds from+"\x00"+vocabulary for every mention of a specific (not bare-word) value.
+	// corroborated holds from+"\x00"+vocabulary for every source that mentions a value of that vocabulary which needs no
+	// corroboration itself: a specific value, or a bare word the vocabulary trusts.
 	corroborated map[string]bool
 	pending      []pendingMention
 }
@@ -191,17 +191,18 @@ func jsonValues(b []byte, list, key string) []string {
 	return out
 }
 
-// mention links `from` (a function id or a file id) to every node that holds value.
-func (v *Vocab) mention(ctx *Ctx, from, filePath, value, evidence string, conf float64) {
-	v.mentionAs(ctx, from, filePath, value, evidence, conf, graph.Mentions)
+// mention links `from` (a function id or a file id) to every node that holds value. literal says the value was written out
+// as a string; false means it came in through a constant or an enum case, which names the value on purpose and is never
+// taken for an unrelated string (see Vocab).
+func (v *Vocab) mention(ctx *Ctx, from, filePath, value, evidence string, conf float64, literal bool) {
+	v.mentionAs(ctx, from, filePath, value, evidence, conf, graph.Mentions, literal)
 }
 
 // mentionAs is mention with the kind used when the vocabulary gives the file no role.
-func (v *Vocab) mentionAs(ctx *Ctx, from, filePath, value, evidence string, conf float64, fallback string) {
+func (v *Vocab) mentionAs(ctx *Ctx, from, filePath, value, evidence string, conf float64, fallback string, literal bool) {
 	if v == nil {
 		return
 	}
-	literal := strings.HasSuffix(evidence, " literal "+value)
 	bare := bareWord.MatchString(value)
 	for _, ref := range v.byValue[value] {
 		ambiguous := bare && !ref.trusted
