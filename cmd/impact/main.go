@@ -29,7 +29,8 @@ const usage = `impact: ask a repository what a change influences.
   impact trace <from> <to>          the cheapest path a value or a change takes from <from> to <to>
   impact meet <a> <b>               the columns, fields and events two things share: how <a> reaches <b>
   impact hubs                       god nodes: the most connected symbols and contracts, how many communities they bridge, where a change floods (alias: god-nodes)
-  impact review                     what the working tree or branch changes, and what it leaves out
+  impact review                     what the working tree or branch changes, and what it leaves out, and the [[obligation]]s it does not meet (--strict: fail on those)
+  impact suggest                    candidate [[obligation]] tables mined from git history, to confirm and paste into impact.toml
   impact merge <snapshot>...        combine the snapshots of several repositories into one graph (--out <file>)
   impact golden                     check the flows pinned in impact.toml
   impact check                      drift checks: lists kept by hand against the contracts that declare them
@@ -137,6 +138,8 @@ func main() {
 		err = cmdHubs(args)
 	case "review":
 		err = cmdReview(args)
+	case "suggest":
+		err = cmdSuggest(args)
 	case "golden":
 		err = cmdGolden(args)
 	case "check":

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/convidera/impact-graph/internal/config"
 	"github.com/convidera/impact-graph/internal/graph"
 )
 
@@ -42,12 +43,22 @@ type Area struct {
 	Nodes int    `json:"nodes"`
 }
 
+// Unmet is a declared obligation (`[[obligation]]` of impact.toml) that the change triggers and does not satisfy.
+type Unmet struct {
+	Name        string   `json:"name"`
+	TriggeredBy []string `json:"triggered_by"` // changed files that match `when` (at most five)
+	Require     []string `json:"require"`
+	Why         string   `json:"why,omitempty"`
+	Fix         string   `json:"fix,omitempty"`
+}
+
 // Report is the result of a review.
 type Report struct {
 	Base    string   `json:"base"`
 	Changed []string `json:"changed"`
 	Nodes   []string `json:"changed_nodes"`
 	Areas   []Area   `json:"areas"`
+	Unmet   []Unmet  `json:"unmet_obligations"`
 	Items   []Item   `json:"items"`
 }
 
@@ -121,10 +132,12 @@ func Changes(root, base string) ([]Change, error) {
 
 // Options tune a review.
 type Options struct {
-	MaxCost  float64
-	MinConf  float64
-	Together float64 // minimum confidence of a co-change edge
-	PerGroup int
+	// Obligations are the declared companion-change rules to check; nil checks none.
+	Obligations []config.Obligation
+	MaxCost     float64
+	MinConf     float64
+	Together    float64 // minimum confidence of a co-change edge
+	PerGroup    int
 }
 
 // DefaultOptions are what the CLI and the MCP tool use.
@@ -139,6 +152,7 @@ func Run(g *graph.Graph, base string, changes []Change, o Options) Report {
 		rep.Changed = append(rep.Changed, c.File)
 	}
 	sort.Strings(rep.Changed)
+	rep.Unmet = Obligations(o.Obligations, rep.Changed)
 
 	byPath := map[string][]*graph.Node{}
 	for _, n := range g.Nodes {
@@ -234,6 +248,37 @@ func Run(g *graph.Graph, base string, changes []Change, o Options) Report {
 	return rep
 }
 
+// Obligations returns the obligations that the changed files trigger and do not satisfy, in declaration order.
+func Obligations(rules []config.Obligation, changed []string) []Unmet {
+	var out []Unmet
+	for _, r := range rules {
+		var by []string
+		for _, f := range changed {
+			if config.Match(r.When, f) && !config.Match(r.Unless, f) {
+				by = append(by, f)
+			}
+		}
+		if len(by) == 0 {
+			continue
+		}
+		met := false
+		for _, f := range changed {
+			if config.Match(r.Require, f) {
+				met = true
+				break
+			}
+		}
+		if met {
+			continue
+		}
+		if len(by) > 5 {
+			by = by[:5]
+		}
+		out = append(out, Unmet{Name: r.Name, TriggeredBy: by, Require: r.Require, Why: r.Why, Fix: r.Fix})
+	}
+	return out
+}
+
 // areas counts the changed nodes per community, largest first, ties by id.
 func areas(g *graph.Graph, ids []string) []Area {
 	counts := map[int]int{}
@@ -326,6 +371,18 @@ func PathString(g *graph.Graph, hits map[string]*graph.Hit, id string) string {
 func Text(r Report, perGroup int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "review against %s: %d changed files, %d changed symbols or contracts\n", r.Base, len(r.Changed), len(r.Nodes))
+	if len(r.Unmet) > 0 {
+		fmt.Fprintf(&b, "\n## obligations this change has not met (%d)\n", len(r.Unmet))
+		for _, u := range r.Unmet {
+			fmt.Fprintf(&b, "  %s\n      triggered by %s\n      needs a change in %s\n", u.Name, strings.Join(u.TriggeredBy, ", "), strings.Join(u.Require, " or "))
+			if u.Why != "" {
+				fmt.Fprintf(&b, "      why: %s\n", u.Why)
+			}
+			if u.Fix != "" {
+				fmt.Fprintf(&b, "      fix: %s\n", u.Fix)
+			}
+		}
+	}
 	if len(r.Areas) > 0 {
 		b.WriteString("\n## changed areas\n")
 		for _, a := range r.Areas {
@@ -358,7 +415,7 @@ func Text(r Report, perGroup int) string {
 			fmt.Fprintf(&b, "  %s  [cost %.1f, confidence %.2f]\n      because %s\n", it.Path, it.Cost, it.Conf, it.Why)
 		}
 	}
-	if len(r.Items) == 0 {
+	if len(r.Items) == 0 && len(r.Unmet) == 0 {
 		b.WriteString("\nnothing related is missing from the change\n")
 	}
 	return b.String()

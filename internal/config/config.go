@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,6 +24,7 @@ type Config struct {
 	Mounts     []Mount      `toml:"mount"`
 	Golden     []Golden     `toml:"golden"`
 	Checks     []Check      `toml:"check"`
+	Obligation []Obligation `toml:"obligation"`
 	Cluster    Cluster      `toml:"cluster"`
 
 	Root                                  string `toml:"-"`
@@ -186,6 +188,43 @@ type Golden struct {
 	Absent  bool     `toml:"absent"`
 }
 
+// Obligation declares a companion change that a repository's own rules demand: when a changed file matches When (and none
+// of Unless), some changed file must match one of Require. `impact review` lists the obligations a change has not met, with
+// the files that triggered them and the command that usually fixes it. The rules that live as prose in AGENTS.md ("an API
+// change regenerates the client", "a UI change updates its test plan") belong here, where review and CI can read them.
+// `impact suggest` proposes candidates from git history.
+//
+//	[[obligation]]
+//	name = "API shape: regenerate the OpenAPI document"
+//	when = ["backend/app/Domain/*/Data/**", "backend/routes/**"]
+//	unless = ["**/*Test.php"]                  # optional: changed files that do not trigger it
+//	require = ["integration/api.json"]         # any one changed file matching any of these satisfies it
+//	why = "the document and the generated client derive from the Data classes and routes"
+//	fix = "devops agents generate"             # optional: what to run
+type Obligation struct {
+	Name    string   `toml:"name"`
+	When    []string `toml:"when"`
+	Unless  []string `toml:"unless"`
+	Require []string `toml:"require"`
+	Why     string   `toml:"why"`
+	Fix     string   `toml:"fix"`
+}
+
+// validate reports the first obligation that cannot work as written.
+func (c *Config) validate() error {
+	for i, o := range c.Obligation {
+		switch {
+		case o.Name == "":
+			return fmt.Errorf("obligation #%d has no name", i+1)
+		case len(o.When) == 0:
+			return fmt.Errorf("obligation %q has no `when` globs", o.Name)
+		case len(o.Require) == 0:
+			return fmt.Errorf("obligation %q has no `require` globs", o.Name)
+		}
+	}
+	return nil
+}
+
 type glob struct{ res []*regexp.Regexp }
 
 // Load reads <root>/impact.toml when present.
@@ -215,6 +254,9 @@ func Load(root string, explicit string) (*Config, error) {
 	}
 	if c.Index.Db == "" {
 		c.Index.Db = ".impact/graph.db"
+	}
+	if err := c.validate(); err != nil {
+		return nil, err
 	}
 	return c, nil
 }

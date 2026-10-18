@@ -21,10 +21,11 @@ func cmdReview(args []string) error {
 	together := fs.Float64("together", review.DefaultOptions().Together, "minimum confidence of a co-change edge")
 	limit := fs.Int("limit", review.DefaultOptions().PerGroup, "rows per group")
 	asJSON := fs.Bool("json", false, "JSON output")
+	strict := fs.Bool("strict", false, "exit with an error when a declared obligation is not met")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
-	g, _, err := c.graph()
+	g, cfg, err := c.graph()
 	if err != nil {
 		return err
 	}
@@ -38,11 +39,18 @@ func cmdReview(args []string) error {
 	}
 	o := review.DefaultOptions()
 	o.MaxCost, o.Together = *maxCost, *together
+	o.Obligations = cfg.Obligation
 	rep := review.Run(g, b, changes, o)
 	if *asJSON {
-		return json.NewEncoder(os.Stdout).Encode(rep)
+		if err := json.NewEncoder(os.Stdout).Encode(rep); err != nil {
+			return err
+		}
+	} else {
+		fmt.Print(review.Text(rep, *limit))
 	}
-	fmt.Print(review.Text(rep, *limit))
+	if *strict && len(rep.Unmet) > 0 {
+		return fmt.Errorf("%d obligations not met", len(rep.Unmet))
+	}
 	return nil
 }
 
