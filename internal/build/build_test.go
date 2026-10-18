@@ -937,3 +937,61 @@ consume = ["b/one.go"]
 		t.Errorf("a vocabulary pinned to one file is trusted, got %v", c)
 	}
 }
+
+func TestABareWordThatComesInThroughAConstantIsNotDowngraded(t *testing.T) {
+	files := map[string]string{
+		"impact.toml": `
+[[vocabulary]]
+name = "event"
+type = "event"
+values = ["error"]
+produce = ["svc/**"]
+consume = ["app/**"]
+`,
+		"go.mod": "module example.com/svc\n\ngo 1.22\n",
+		"svc/a.go": `package svc
+
+const TypeError = "error"
+
+func ViaConst() string { return TypeError }
+
+func ViaLiteral() string { return "error" }
+`,
+		"app/E.php": `<?php
+namespace App;
+class E { const ERR = 'error'; }
+class H {
+    public function viaConst() { return E::ERR; }
+    public function viaLiteral() { return 'error'; }
+}`,
+	}
+	for i := 0; i < extract.NarrowFiles+1; i++ {
+		files["svc/pad"+strconv.Itoa(i)+".go"] = "package svc\n"
+	}
+	root := t.TempDir()
+	write(t, root, files)
+	g := index(t, root)
+	conf := func(suffix string) float64 {
+		for _, e := range g.Edges {
+			if strings.HasSuffix(e.Src, suffix) && e.Dst == "event:error" {
+				return e.Conf
+			}
+		}
+		return -1
+	}
+	for _, c := range []struct {
+		src  string
+		want float64
+		why  string
+	}{
+		{"svc.ViaConst", -2, "a constant names the value on purpose"},
+		{"svc.ViaLiteral", extract.AmbiguousConf, "a lone literal is a guess"},
+		{`App\H::viaConst`, -2, "a class constant names the value on purpose"},
+		{`App\H::viaLiteral`, extract.AmbiguousConf, "a lone literal is a guess"},
+	} {
+		got := conf(c.src)
+		if c.want == -2 && got < 0.7 || c.want != -2 && got != c.want {
+			t.Errorf("%s: confidence %v: %s", c.src, got, c.why)
+		}
+	}
+}
