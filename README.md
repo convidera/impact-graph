@@ -267,13 +267,21 @@ region = ["'spec' => \\[\\s*\\n", "\\n            \\],"]
 extract = "'(\\w+)' =>"
 ```
 
-Sources are `openapi-schema:<file>#<Schema>`, `openapi-paths:<file>`, `openapi-operations:<file>`, `openapi-event-types:<file>`,
-`openapi-extension:<file>#<x-key>`, `registry-list:<file>#a.b`, `registry-keys:<file>#a.b/key`, `registry-payload-keys:<file>#<producer>`,
-`registry-family-keys:<file>#<prefix>`, `go-struct:<file>#<Type>` (json names) and `go-struct-required:<file>#<Type>` (those without
-`omitempty`); a list unions them. `found_source` reads the found side from a generated document instead of code. This repository
-declares 41 of them in `impact.toml`: the event registry against the backend, frontend, adapter and docs, the enums of
-`contracts/agent-kinds.json` against their PHP copies, the CRD Go types against the PHP manifest builder, and the keys of the
-PHP adapter client against `integration/adapter-api.json`.
+Sources are `openapi-schema:<file>#<Schema>`, `openapi-paths:<file>`, `openapi-operations:<file>`, `go-struct:<file>#<Type>`
+(json names, read with the Go parser, embedded `json:",inline"` structs followed), `go-struct-required:<file>#<Type>` (those
+without `omitempty`) and `json:<file>#<selector>` for everything else in a JSON document; a list unions them. A selector is
+dot-separated keys, each with one optional suffix: `[]` (the elements of an array), `[k=v]` (the elements whose `k` equals `v`)
+or `{}` (the property names of an object). Strings reached are the values:
+
+| Selector | Values |
+|---|---|
+| `x-vocabularies.usage[]` | the strings of that array |
+| `x-agents[].kind` | the `kind` of every element |
+| `x-events[producer=mcs].payload.properties{}` | the payload keys of the events of one producer |
+| `x-event-types[].type` | the `type` of each element |
+
+`found_source` reads the found side from a document instead of code. (The platform-specific kinds `registry-*`,
+`openapi-event-types` and `openapi-extension` of earlier versions are gone: each is one `json:` selector.)
 
 Node arguments accept an exact id, a repository path or any unique substring (`SpendGuard::assertAllowed`); an ambiguous one
 prints the candidates instead of guessing.
