@@ -274,7 +274,16 @@ func (s *scope) mention(val string, n *ts.Node, conf float64) {
 		*s.collect = append(*s.collect, val)
 		return
 	}
-	s.p.ctx.Vocab.mention(s.p.ctx, s.from, s.f.src.file.Path, val, s.ev(n, "literal "+val), conf)
+	s.p.ctx.Vocab.mention(s.p.ctx, s.from, s.f.src.file.Path, val, s.ev(n, "literal "+val), conf, true)
+}
+
+// mentionConst is mention for a value that comes in through a class constant or an enum case.
+func (s *scope) mentionConst(val string, n *ts.Node, conf float64) {
+	if s.collect != nil {
+		*s.collect = append(*s.collect, val)
+		return
+	}
+	s.p.ctx.Vocab.mention(s.p.ctx, s.from, s.f.src.file.Path, val, s.ev(n, "constant "+val), conf, false)
 }
 
 func (s *scope) useClass(fqn string, n *ts.Node) {
@@ -352,7 +361,7 @@ func (s *scope) onClassConst(n *ts.Node) string {
 		return ""
 	}
 	if v, ok := s.p.constValue(fqn, name); ok {
-		s.mention(v, n, 0.85)
+		s.mentionConst(v, n, 0.85)
 	}
 	return ""
 }
