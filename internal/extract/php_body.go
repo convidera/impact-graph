@@ -292,6 +292,13 @@ func (s *scope) useClass(fqn string, n *ts.Node) {
 	}
 }
 
+// createsClass is useClass for a `new X(...)` instantiation: the edge is `creates`, not `uses`.
+func (s *scope) createsClass(fqn string, n *ts.Node) {
+	if c := s.p.classes[fqn]; c != nil {
+		s.edge(c.ID, graph.Creates, 1, n, "")
+	}
+}
+
 func (s *scope) resolveScope(n *ts.Node) string {
 	if n == nil {
 		return ""
@@ -329,7 +336,7 @@ func (s *scope) onNew(n *ts.Node) string {
 		s.evalAll(args)
 		return fqn
 	}
-	s.useClass(fqn, n)
+	s.createsClass(fqn, n)
 	if ctor := s.p.findMethod(fqn, "__construct"); ctor != nil {
 		s.edge(ctor.ID, graph.Calls, 1, n, "new "+c.Short)
 	}

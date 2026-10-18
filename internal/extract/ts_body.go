@@ -357,7 +357,7 @@ func (s *tsScope) onNew(n *ts.Node) *tsSym {
 		cls = s.lookup(s.m.Src.text(c))
 	}
 	if cls != nil && cls.Kind == "class" {
-		s.edge(cls, graph.Uses, 1, n, "")
+		s.edge(cls, graph.Creates, 1, n, "")
 		if ctor := s.x.member(cls, "constructor"); ctor != nil {
 			s.edge(ctor, graph.Calls, 1, n, "new "+cls.Name)
 		}

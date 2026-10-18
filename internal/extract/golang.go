@@ -830,7 +830,7 @@ func (s *goScope) evalMulti(n *ts.Node) []string {
 func (s *goScope) onComposite(n *ts.Node) string {
 	ty := s.g.typeKey(s.f, field(n, "type"))
 	if t := s.g.types[strings.TrimPrefix(ty, "[]")]; t != nil {
-		s.edge("go:"+t.Key, graph.Uses, 1, n, "")
+		s.edge("go:"+t.Key, graph.Creates, 1, n, "")
 	}
 	s.literalBody(ty, field(n, "body"))
 	return ty
@@ -883,7 +883,7 @@ func (s *goScope) evalElement(n *ts.Node, expected string) {
 	}
 	if n.Kind() == "literal_value" {
 		if t := s.g.types[strings.TrimPrefix(expected, "[]")]; t != nil {
-			s.edge("go:"+t.Key, graph.Uses, 1, n, "")
+			s.edge("go:"+t.Key, graph.Creates, 1, n, "")
 		}
 		s.literalBody(expected, n)
 		return

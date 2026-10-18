@@ -419,6 +419,12 @@ func TestGoInterfacesFieldsAndVocabulary(t *testing.T) {
 	if !hasEdge(g, store, "go:example.com/runtime/usage.Child.Cost", graph.Writes) {
 		t.Errorf("a keyed literal writes the field")
 	}
+	if !hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("a composite literal of a named struct type instantiates it: []Child{{...}} creates Child")
+	}
+	if hasEdge(g, store, "go:example.com/runtime/usage.Child", graph.Uses) {
+		t.Errorf("a composite literal must not also be a uses edge")
+	}
 	if !hasEdge(g, report, "go:example.com/runtime/usage.Child.Cost", graph.Reads) {
 		t.Errorf("c.Cost reads the field through a typed local")
 	}
@@ -573,6 +579,87 @@ func TestFrontendAndPythonJoinTheBackend(t *testing.T) {
 	p2 := mustTrace(t, g, "column:entries.note", run)
 	if p2[len(p2)-1].ID != run {
 		t.Errorf("a column read by the index action reaches the Python client that fetches it: %v", p2)
+	}
+}
+
+func TestInstantiationBecomesACreatesEdge(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"app/Money.php": `<?php
+namespace App;
+class Money {
+    public function __construct(private int $cents) {}
+}`,
+		"app/Wallet.php": `<?php
+namespace App;
+class Wallet {
+    public function __construct() {}
+    public static function empty(): self {
+        return new self();
+    }
+    public function deposit(int $cents): Money {
+        $m = new Money($cents);
+        return $m;
+    }
+    public function describe(Money $m): string {
+        return Money::class . (string) $m;
+    }
+}`,
+		"tsconfig.json": `{
+  "compilerOptions": { "baseUrl": ".", "paths": {} }
+}`,
+		"resources/js/wallet.ts": `export class Money {
+  constructor(public cents: number) {}
+}
+
+export class Wallet {
+  deposit(cents: number): Money {
+    const m = new Money(cents);
+    return m;
+  }
+
+  describe(m: Money): string {
+    return ` + "`${m.cents}`" + `;
+  }
+}
+`,
+	})
+	g := index(t, root)
+
+	// PHP: `new Money(...)` is a creates edge (and still calls its constructor); a static call and a type hint stay uses.
+	deposit := `php:App\Wallet::deposit`
+	money := `php:App\Money`
+	if !hasEdge(g, deposit, money, graph.Creates) {
+		t.Errorf("`new Money($cents)` must create a creates edge from Wallet::deposit to Money")
+	}
+	if hasEdge(g, deposit, money, graph.Uses) {
+		t.Errorf("an instantiation must not also be recorded as a uses edge")
+	}
+	if !hasEdge(g, deposit, `php:App\Money::__construct`, graph.Calls) {
+		t.Errorf("`new Money(...)` must still call the constructor")
+	}
+	empty := `php:App\Wallet::empty`
+	wallet := `php:App\Wallet`
+	if !hasEdge(g, empty, wallet, graph.Creates) {
+		t.Errorf("`new self()` must create a creates edge to the enclosing class")
+	}
+	describe := `php:App\Wallet::describe`
+	if !hasEdge(g, describe, money, graph.Uses) {
+		t.Errorf("a static call (Money::class) and a type hint must keep the uses edge")
+	}
+	if hasEdge(g, describe, money, graph.Creates) {
+		t.Errorf("a static call and a type hint must not become a creates edge")
+	}
+
+	// TypeScript: `new Money(...)` is a creates edge; the type hint on the parameter stays uses.
+	tsDeposit := "ts:resources/js/wallet.ts#Wallet.deposit"
+	tsMoney := "ts:resources/js/wallet.ts#Money"
+	if !hasEdge(g, tsDeposit, tsMoney, graph.Creates) {
+		t.Errorf("`new Money(cents)` must create a creates edge from Wallet.deposit to Money")
+	}
+	tsDescribe := "ts:resources/js/wallet.ts#Wallet.describe"
+	if !hasEdge(g, tsDescribe, tsMoney, graph.Uses) {
+		t.Errorf("a type-hinted parameter (m: Money) must keep the uses edge")
 	}
 }
 
