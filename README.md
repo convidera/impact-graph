@@ -80,6 +80,17 @@ relative, `from . import auth`, `from .api import call`), calls to imported func
 `self.attr.method()` where `__init__` assigned the attribute a class, constructors, and HTTP calls to routes
 (`requests.get("https://host/api/x")`, f-strings).
 
+**OpenAPI** (zero configuration): a JSON or YAML document with a top-level `openapi` or `swagger` key becomes `schema` and
+`operation` nodes that point at their line in the document. An operation `uses` the schemas of its parameters, body and
+responses (a schema `uses` the ones it refers to), `maps_to` the route that serves it (verb and path, a `servers` prefix such as
+`/api` accounted for), and a schema `maps_to` the class, struct or type of the same name in every language: the PHP Data
+class, the Go struct and the generated TypeScript interface that share it. Several types of one name in a language are told
+apart by the document's name (`adapter-api.json` and `.../adapterapi/`), else joined as guesses (0.6). The path of an operation
+is also a vocabulary value, so a function that names it as a string (a hand-written HTTP client, a router registration) is
+linked to the operation: a change to a Data class then reaches `integration/api.json` in `impact review`, and the PHP client
+method that calls an operation is one hop from the Go type that serves it. A document larger than `[index] max_file_bytes`
+(default 1 MiB) is not read.
+
 **Any language**: documents that name a thing in backticks or links (`documented_in`), tests found by convention, files that
 change together in git history (`co_changed`), and string literals that match a declared vocabulary (event types, tool names),
 now at function level in Go, PHP, TypeScript, Vue and Python.

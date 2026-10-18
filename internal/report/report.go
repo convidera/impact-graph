@@ -443,8 +443,12 @@ func OverviewIn(g *graph.Graph, repo string, communities, gods int) string {
 
 	b.WriteString("\ngod nodes:\n")
 	b.WriteString(GodNodes(g, g.GodNodes(gods, graph.GodOptions{Repo: repo})))
-	fmt.Fprintf(&b, "\ncontracts: tables=%d columns=%d routes=%d mcp-tools=%d values=%d\n",
+	fmt.Fprintf(&b, "\ncontracts: tables=%d columns=%d routes=%d mcp-tools=%d values=%d",
 		types[graph.TypeTable], types[graph.TypeColumn], types[graph.TypeRoute], types[graph.TypeTool], types[graph.TypeValue])
+	if types[graph.TypeOp]+types[graph.TypeSchema] > 0 {
+		fmt.Fprintf(&b, " operations=%d schemas=%d", types[graph.TypeOp], types[graph.TypeSchema])
+	}
+	b.WriteString("\n")
 	return b.String()
 }
 
