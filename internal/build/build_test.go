@@ -384,6 +384,10 @@ func (Store) NoChildren() []Child {
 	return []Child{}
 }
 
+func (Store) ChildrenByName() map[string]Child {
+	return map[string]Child{"a": {Cost: 1}}
+}
+
 func (Store) ChildrenByKey() map[Key]Child {
 	return map[Key]Child{"a": {Cost: 1}}
 }
@@ -468,8 +472,11 @@ func TestGoInterfacesFieldsAndVocabulary(t *testing.T) {
 	if !hasEdge(g, noChildren, "go:example.com/runtime/usage.Child", graph.Uses) {
 		t.Errorf("an empty slice literal still mentions its element type: []Child{} uses Child")
 	}
+	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByName", "go:example.com/runtime/usage.Child", graph.Creates) {
+		t.Errorf("an elided struct literal inside a builtin-keyed map literal creates the value type: map[string]Child{\"a\": {...}} creates Child")
+	}
 	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenByKey", "go:example.com/runtime/usage.Child", graph.Creates) {
-		t.Errorf("an elided struct literal inside a map literal creates the value type: map[Key]Child{\"a\": {...}} creates Child")
+		t.Errorf("an elided struct literal inside a named-key map literal creates the value type: map[Key]Child{\"a\": {...}} creates Child")
 	}
 	if !hasEdge(g, "go:example.com/runtime/usage.Store.ChildrenArray", "go:example.com/runtime/usage.Child", graph.Creates) {
 		t.Errorf("an elided struct literal inside an array literal creates the element type: [2]Child{{...}} creates Child")
@@ -1253,13 +1260,12 @@ class H {
 	}
 }
 
-// TestMapTypeKeyRequiresBothKeyAndValueToResolve documents a deliberate narrowing: typeKey only treats
-// map[K]V as a named type (and so only gives an elided literal inside it a creates edge) when both K and
-// V resolve to a declared type. A builtin key such as string never resolves, so map[string]Child loses
-// the creates edge it would otherwise get (unlike map[Key]Child in TestGoInterfacesFieldsAndVocabulary,
-// where Key is a declared type) — a conservative trade-off to avoid reporting a malformed "map[]Child"
-// (indistinguishable from a key that failed to parse) for the very common builtin-keyed map.
-func TestMapTypeKeyRequiresBothKeyAndValueToResolve(t *testing.T) {
+// TestMapTypeKeyFallsBackToSourceTextWhenUnresolved checks typeKey's map_type representation directly
+// through the "type" property it stores on a struct field node: an unresolved (builtin) key falls back to
+// its source text, so a builtin-keyed map of a named value type still reads as "map[string]Child" (never
+// the ambiguous "map[]Child"), while a map whose value type doesn't resolve to anything named (a builtin
+// value, or a key/value pair neither of which matters once the value is unresolved) yields no type at all.
+func TestMapTypeKeyFallsBackToSourceTextWhenUnresolved(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, map[string]string{
 		"runtime/go.mod": "module example.com/runtime\n\ngo 1.22\n",
@@ -1269,17 +1275,17 @@ type Child struct {
 	Cost float64
 }
 
-type Store struct{}
-
-func (Store) ByBuiltinKey() map[string]Child {
-	return map[string]Child{"a": {Cost: 1}}
+type Holder struct {
+	ByBuiltinKey map[string]Child
+	ByBuiltinAll map[string]string
 }
 `,
 	})
 	g := index(t, root)
-	by := "go:example.com/runtime/usage.Store.ByBuiltinKey"
-	child := "go:example.com/runtime/usage.Child"
-	if hasEdge(g, by, child, graph.Creates) {
-		t.Errorf("a builtin (unresolved) map key suppresses the creates edge: map[string]Child{\"a\": {...}} does not create Child")
+	if got := g.Nodes["go:example.com/runtime/usage.Holder.ByBuiltinKey"].Props["type"]; got != "map[string]example.com/runtime/usage.Child" {
+		t.Errorf("an unresolved (builtin) map key falls back to its source text: got type %q, want map[string]example.com/runtime/usage.Child", got)
+	}
+	if got := g.Nodes["go:example.com/runtime/usage.Holder.ByBuiltinAll"].Props["type"]; got != "" {
+		t.Errorf("a map whose value type doesn't resolve to a named type gets no type at all: got %q, want \"\"", got)
 	}
 }

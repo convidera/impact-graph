@@ -260,9 +260,17 @@ func (g *golang) typeKey(f *goFile, n *ts.Node) string {
 			return "[]" + e
 		}
 	case "map_type":
-		// Both the key and the value must resolve to a named type; otherwise "map[" + "" + "]" + v would
-		// read as a malformed "map[]T" (indistinguishable from a key that failed to parse at all).
-		if k, v := g.typeKey(f, field(n, "key")), g.typeKey(f, field(n, "value")); k != "" && v != "" {
+		// The value must resolve to a named type, or there is nothing for an elided literal to create. The
+		// key does not need to: elementType only ever extracts the value part, so for a key that doesn't
+		// resolve to a named type (a builtin such as string or int, the overwhelmingly common case) fall
+		// back to its source text, so the result reads as "map[string]Child", never the ambiguous "map[]T".
+		if v := g.typeKey(f, field(n, "value")); v != "" {
+			k := g.typeKey(f, field(n, "key"))
+			if k == "" {
+				if k = strings.TrimSpace(f.src.text(field(n, "key"))); k == "" {
+					k = "_"
+				}
+			}
 			return "map[" + k + "]" + v
 		}
 	}
