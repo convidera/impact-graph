@@ -1289,3 +1289,89 @@ type Holder struct {
 		t.Errorf("a map whose value type doesn't resolve to a named type gets no type at all: got %q, want \"\"", got)
 	}
 }
+
+func TestForeignKeysBecomeReferencesEdges(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"database/migrations/2026_01_01_000000_create_users_table.php": `<?php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+        });
+        Schema::create('agent_sessions', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('acting_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('legacy_owner')->nullable();
+            $table->foreignId('dropped_user_id')->constrained('users');
+            $table->foreignId('missing_id')->constrained('nowhere');
+        });
+        Schema::create('events', function (Blueprint $table) {
+            $table->id();
+            $table->foreignUuid('session_id')->constrained('agent_sessions')->cascadeOnDelete();
+            $table->unsignedBigInteger('author');
+            $table->foreign('author')->references('id')->on('users');
+            $table->foreignId('renamed_from')->constrained('users');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('events');
+    }
+};
+`,
+		"database/migrations/2026_01_02_000000_change_sessions.php": `<?php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::table('agent_sessions', function (Blueprint $table) {
+            $table->foreign('legacy_owner')->references('id')->on('users');
+            $table->dropConstrainedForeignId('dropped_user_id');
+        });
+        Schema::table('events', function (Blueprint $table) {
+            $table->renameColumn('renamed_from', 'editor_id');
+        });
+    }
+};
+`,
+	})
+	g := index(t, root)
+
+	for _, e := range [][2]string{
+		{"column:agent_sessions.user_id", "column:users.id"},
+		{"column:agent_sessions.acting_user_id", "column:users.id"},
+		{"column:agent_sessions.legacy_owner", "column:users.id"},
+		{"column:events.session_id", "column:agent_sessions.id"},
+		{"column:events.author", "column:users.id"},
+		{"column:events.editor_id", "column:users.id"},
+	} {
+		if !hasEdge(g, e[0], e[1], graph.References) {
+			t.Errorf("missing references edge %s -> %s", e[0], e[1])
+		}
+	}
+	for _, id := range []string{"column:agent_sessions.dropped_user_id", "column:agent_sessions.missing_id"} {
+		for _, e := range g.Edges {
+			if e.Src == id && e.Kind == graph.References {
+				t.Errorf("%s must not reference anything: %+v", id, e)
+			}
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Src == "column:agent_sessions.acting_user_id" && e.Kind == graph.References {
+			if e.Prov != graph.ProvConvention || !strings.Contains(e.Evidence, "create_users_table.php:") {
+				t.Errorf("references edge should be a convention with file:line evidence, got %+v", e)
+			}
+		}
+	}
+}

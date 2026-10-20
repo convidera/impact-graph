@@ -64,6 +64,14 @@ type tableInfo struct {
 	Name string
 	Cols map[string]int // column -> line of its last declaration
 	File map[string]string
+	FKs  map[string]foreignKey // column -> the column it references
+}
+
+// foreignKey is a column that references another table's column; the target is resolved once every migration is read.
+type foreignKey struct {
+	Table, Col string
+	File       string
+	Line       int
 }
 
 type php struct {

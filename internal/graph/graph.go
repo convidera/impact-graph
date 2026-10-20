@@ -127,7 +127,7 @@ func DefaultProv(kind, dst string, conf float64, evidence string) string {
 		return ProvDeclared
 	case Produces, Consumes, Mentions:
 		return ProvContract
-	case Requests, Exposes, MapsTo, Registers:
+	case Requests, Exposes, MapsTo, Registers, References:
 		return ProvConvention
 	case Implements, Refines, DerivedFrom:
 		return ProvHuman
@@ -161,6 +161,7 @@ const (
 	Extends      = "extends"       // child -> parent class, interface or trait
 	MemberOf     = "member_of"     // method or field -> its class
 	Registers    = "registers"     // class -> class it lists (a server's tools, a provider's bindings)
+	References   = "references"    // foreign key column -> the column it points at (`orders.user_id` -> `users.id`)
 	MapsTo       = "maps_to"       // model class <-> table
 	DocumentedIn = "documented_in" // node -> document that names it
 	CoChanged    = "co_changed"    // file <-> file that change together in git history
@@ -220,6 +221,7 @@ var Kinds = map[string]KindInfo{
 	Extends:      {Struct, Rev, None, 3, 3},
 	MemberOf:     {Struct, Fwd, None, 3, 3},
 	Registers:    {Struct, Rev, None, 2, 2},
+	References:   {Struct, Rev, None, 3, 3},
 	MapsTo:       {Struct, Both, None, 2, 2},
 	DocumentedIn: {Attach, Fwd, None, 0.5, 0.5},
 	CoChanged:    {History, Both, None, 2, 2},
