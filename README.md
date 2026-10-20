@@ -352,7 +352,7 @@ block to stderr. `impact find` and `impact_find` say how many hits each reposito
 Repositories also join without any configuration, through names that are unique across projects:
 
 - **environment variables**: a `.env.example` (or any `.env`, `*.env`), a compose `environment:`, a Kubernetes or Helm `env:` list
-  defines `ADAPTER_CLONE_TIMEOUT`; a PHP `env()` or `getenv()`, a Go `os.Getenv`/`os.LookupEnv`, a TypeScript
+  defines `ADAPTER_CLONE_TIMEOUT`; a PHP `env()` or `getenv()`, a Go `os.Getenv`/`os.LookupEnv` (or a function named `getenv`/`lookupEnv` that the code takes as a parameter or field, so tests can inject the environment), a TypeScript
   `process.env.X` or `import.meta.env.X` and a Python `os.environ`/`os.getenv` reads it;
 - **images**: a workflow pushes `ghcr.io/org/app-backend:latest` (`docker push`, `docker build -t`, the `images:` and `tags:`
   of a docker action) and a manifest deploys `registry.example.com/org/app-backend:1.2`; the registry, the tag and the digest
