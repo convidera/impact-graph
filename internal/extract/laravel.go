@@ -54,7 +54,7 @@ func (p *php) columnID(table, col string) string {
 func (p *php) tableInfo(name string) *tableInfo {
 	t := p.tables[name]
 	if t == nil {
-		t = &tableInfo{Name: name, Cols: map[string]int{}, File: map[string]string{}}
+		t = &tableInfo{Name: name, Cols: map[string]int{}, File: map[string]string{}, FKs: map[string]foreignKey{}}
 		p.tables[name] = t
 	}
 	return t
@@ -102,6 +102,23 @@ func (p *php) buildSchema() {
 			g.AddNode(graph.Node{ID: id, Type: graph.TypeColumn, Label: name + "." + col, Path: t.File[col], Line: ln})
 			g.AddEdge(id, "table:"+name, graph.MemberOf, 1, t.File[col])
 			p.colOwners[col] = append(p.colOwners[col], name)
+		}
+	}
+	for _, name := range names {
+		t := p.tables[name]
+		cols := make([]string, 0, len(t.FKs))
+		for col := range t.FKs {
+			cols = append(cols, col)
+		}
+		sort.Strings(cols)
+		for _, col := range cols {
+			fk := t.FKs[col]
+			if _, ok := t.Cols[col]; !ok {
+				continue
+			}
+			if dst := p.columnID(fk.Table, fk.Col); dst != "" {
+				g.AddEdge("column:"+name+"."+col, dst, graph.References, 0.95, fk.File+":"+itoa(fk.Line))
+			}
 		}
 	}
 }
@@ -159,7 +176,7 @@ func (p *php) schemaCall(f *phpFile, n *ts.Node, created map[string][2]string) {
 			if root == nil || root.Kind() != "variable_name" || strings.TrimPrefix(f.src.text(root), "$") != varName || len(calls) == 0 {
 				return true
 			}
-			p.columnOp(f, info, calls[0], x)
+			p.columnOp(f, info, calls, x)
 			return false
 		})
 	case "rename":
@@ -174,7 +191,8 @@ func (p *php) schemaCall(f *phpFile, n *ts.Node, created map[string][2]string) {
 	}
 }
 
-func (p *php) columnOp(f *phpFile, t *tableInfo, c chainCall, at *ts.Node) {
+func (p *php) columnOp(f *phpFile, t *tableInfo, chain []chainCall, at *ts.Node) {
+	c := chain[0]
 	first := func() string {
 		if len(c.args) > 0 {
 			return stringLiteral(f.src, c.args[0])
@@ -191,6 +209,7 @@ func (p *php) columnOp(f *phpFile, t *tableInfo, c chainCall, at *ts.Node) {
 		for _, col := range cols {
 			delete(t.Cols, col)
 			delete(t.File, col)
+			delete(t.FKs, col)
 		}
 	}
 	strs := func() []string {
@@ -244,15 +263,59 @@ func (p *php) columnOp(f *phpFile, t *tableInfo, c chainCall, at *ts.Node) {
 		if len(c.args) >= 2 {
 			from, to := stringLiteral(f.src, c.args[0]), stringLiteral(f.src, c.args[1])
 			if _, ok := t.Cols[from]; ok && to != "" {
+				fk, isFK := t.FKs[from]
 				del(from)
 				add(to)
+				if isFK {
+					t.FKs[to] = fk
+				}
 			}
+		}
+	case "foreign":
+		if col := first(); col != "" {
+			p.foreignKeyChain(f, t, col, chain[1:], at)
 		}
 	default:
 		if !schemaIgnored[c.name] && !strings.HasPrefix(c.name, "drop") {
 			add(first())
+			if col := first(); col != "" && (c.name == "foreignId" || c.name == "foreignUuid" || c.name == "foreignUlid") {
+				p.foreignKeyChain(f, t, col, chain[1:], at)
+			}
 		}
 	}
+}
+
+// foreignKeyChain reads what follows `foreignId('user_id')` or `foreign('user_id')`: `->constrained('users', 'id')`
+// (the table defaults to the plural of the column without `_id`, the column to `id`), or `->references('id')->on('users')`.
+// Other chain calls (`nullable`, `cascadeOnDelete`, ...) are skipped.
+func (p *php) foreignKeyChain(f *phpFile, t *tableInfo, col string, rest []chainCall, at *ts.Node) {
+	str := func(c chainCall, i int) string {
+		if i < len(c.args) {
+			return stringLiteral(f.src, c.args[i])
+		}
+		return ""
+	}
+	var table, target string
+	for _, c := range rest {
+		switch c.name {
+		case "constrained":
+			table, target = str(c, 0), str(c, 1)
+			if table == "" {
+				table = plural(strings.TrimSuffix(col, "_id"))
+			}
+		case "references":
+			target = str(c, 0)
+		case "on":
+			table = str(c, 0)
+		}
+	}
+	if table == "" {
+		return
+	}
+	if target == "" {
+		target = "id"
+	}
+	t.FKs[col] = foreignKey{Table: table, Col: target, File: f.src.file.Path, Line: line(at)}
 }
 
 // ---- models ----

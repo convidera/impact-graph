@@ -60,6 +60,10 @@ In convidera/managed-coding-service the same commands run as `devops agents impa
   table (`$table` or the plural snake-case name), and for every Eloquent call the columns it **reads** (`where`, `orderBy`,
   `join`, `sum`, ... on a typed query), **writes** (`create`, `update`, `fill`, `insert`, `updateOrCreate`, a `new Model([...])`)
   and attributes it reads (`$entry->date`)
+- **foreign keys** from the migrations: `foreignId('user_id')->constrained()` (table from the column name, or `constrained('users', 'id')`),
+  `foreignUuid`, `foreignUlid` and `foreign('x')->references('id')->on('users')` become a `references` edge from the column to the
+  column it points at (`orders.user_id` -> `users.id`). A walk follows it from the referenced column to the referencing ones
+  (cost 3, like a structure edge; not in a flow), and a column that was dropped or whose target is not in the schema has none
 - routes (prefix groups, `apiResource`) and the controller method that handles each; MCP tools (named after their class, as
   Laravel MCP does) and the server that registers them; JSON resources tied to the model they present
 - framework hooks that hide a call: `Feature::with()` that reflects the called class and runs `handle()`, `Resource::make()`
